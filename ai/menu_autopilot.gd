@@ -8,11 +8,13 @@ extends Node
 ## levels from `endless_seed` (main menu -> Endless -> seed -> Start), then
 ## GameMain.finish_demo().
 ## Command line: --menu-delay=S --endless-levels=N --endless-seed=S
+## --menu-shots=/abs/dir saves each screen once (windowed runs) before pressing.
 
 const LOG_TAG := "Autopilot"
 const MENU_DELAY_PREFIX := "--menu-delay="
 const ENDLESS_LEVELS_PREFIX := "--endless-levels="
 const ENDLESS_SEED_PREFIX := "--endless-seed="
+const MENU_SHOTS_PREFIX := "--menu-shots="
 
 @export var press_delay: float = 0.8
 @export var pause_test_tutorial: int = 1
@@ -26,11 +28,13 @@ var main: GameMain = null
 var presses: int = 0
 var pause_tests_done: int = 0
 var endless_played: int = 0
+var shots_dir: String = ""
 
 var _started: bool = false
 var _tutorials_done: bool = false
 var _endless_started: bool = false
 var _finished: bool = false
+var _shots_taken: Dictionary = {}
 
 
 func _ready() -> void:
@@ -40,6 +44,9 @@ func _ready() -> void:
 	press_delay = _float_flag(MENU_DELAY_PREFIX, press_delay)
 	endless_levels = int(_float_flag(ENDLESS_LEVELS_PREFIX, endless_levels))
 	endless_seed = int(_float_flag(ENDLESS_SEED_PREFIX, endless_seed))
+	shots_dir = DemoMode.option(MENU_SHOTS_PREFIX, "")
+	if not shots_dir.is_empty():
+		DirAccess.make_dir_recursive_absolute(shots_dir)
 	main.screen_changed.connect(_on_screen_changed)
 	main.run_finished.connect(func() -> void: _tutorials_done = true)
 	GameLog.info(LOG_TAG, "plan: 3 tutorials, then %d endless levels from seed %d" % [endless_levels, endless_seed])
@@ -49,6 +56,7 @@ func _on_screen_changed(screen: GameMain.Screen) -> void:
 	match screen:
 		GameMain.Screen.MAIN_MENU:
 			await _delay(press_delay)
+			await _shot("main_menu")
 			if not _started:
 				_started = true
 				_press(main.main_menu.levels_button)
@@ -60,10 +68,12 @@ func _on_screen_changed(screen: GameMain.Screen) -> void:
 				main.finish_demo()
 		GameMain.Screen.LEVEL_SELECT:
 			await _delay(press_delay)
+			await _shot("level_select")
 			_press(main.level_select.level_button(0))
 		GameMain.Screen.ENDLESS_SETUP:
 			await _delay(press_delay)
 			main.endless_setup.seed_field.text = str(endless_seed)
+			await _shot("endless_setup")
 			_press(main.endless_setup.start_button)
 		GameMain.Screen.PLAYING:
 			if pause_tests_done == 0 and GameState.mode == GameStateManager.Mode.TUTORIAL \
@@ -72,6 +82,7 @@ func _on_screen_changed(screen: GameMain.Screen) -> void:
 				_run_pause_test()
 		GameMain.Screen.LEVEL_COMPLETE:
 			await _delay(press_delay)
+			await _shot("level_complete_endless" if GameState.mode == GameStateManager.Mode.ENDLESS else "level_complete")
 			if GameState.mode == GameStateManager.Mode.ENDLESS:
 				endless_played += 1
 				if endless_played >= endless_levels:
@@ -85,8 +96,10 @@ func _run_pause_test() -> void:
 	GameLog.info(LOG_TAG, "pause test: pausing")
 	main.pause()
 	await _delay(press_delay)
+	await _shot("pause")
 	_press(main.pause_menu.settings_button)
 	await _delay(press_delay)
+	await _shot("settings")
 	main.settings_panel.sensitivity_slider.value = test_sensitivity
 	GameLog.info(LOG_TAG, "pause test: sensitivity -> %.2f (saved %.2f)" % [
 		test_sensitivity, float(SaveSystem.current.get_setting("sensitivity"))])
@@ -94,6 +107,18 @@ func _run_pause_test() -> void:
 	_press(main.settings_panel.back_button)
 	await _delay(press_delay)
 	_press(main.pause_menu.resume_button)
+
+
+## Saves the last drawn frame once per `key` (windowed runs with --menu-shots).
+## No await on frame_post_draw: it never fires while macOS keeps an occluded
+## window from drawing, and the autopilot hung on the endless summary.
+func _shot(key: String) -> void:
+	if shots_dir.is_empty() or _shots_taken.has(key) or DisplayServer.get_name() == "headless":
+		return
+	_shots_taken[key] = true
+	var path := shots_dir.path_join("%s.png" % key)
+	var error := get_viewport().get_texture().get_image().save_png(path)
+	GameLog.info(LOG_TAG, "screen shot %s (error %d)" % [path, error])
 
 
 func _press(button: Button) -> void:

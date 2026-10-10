@@ -99,6 +99,7 @@ var _slow_unfocused: int = 0
 var _unfocused_seconds: float = 0.0
 var _focus_changes: int = 0
 var _was_focused: bool = true
+var _undrawable_seconds: float = 0.0
 var _slow_periods: Array[Dictionary] = []
 var _open_period: Dictionary = {}
 var _decorate_at_start: int = 0
@@ -152,6 +153,8 @@ func _process(_delta: float) -> void:
 	_level_seconds += frame
 	if not focused:
 		_unfocused_seconds += frame
+	if not _window_can_draw():
+		_undrawable_seconds += frame
 	if _load_frames_left > 0:
 		_load_frames_left -= 1
 		_load_hitch = maxf(_load_hitch, frame)
@@ -177,7 +180,7 @@ func _track_slow(frame: float, focused: bool, compiled: PackedInt64Array) -> voi
 	var frame_ms := frame * MSEC_PER_SECOND
 	if frame_ms >= HITCH_MS and _hitches.size() < MAX_HITCHES:
 		_hitches.append({"at_s": snappedf(_level_seconds, 0.01), "ms": snappedf(frame_ms, 0.1),
-			"focused": focused, "minimized": _window_minimized(), "pipelines": _named(compiled)})
+			"focused": focused, "minimized": _window_minimized(), "can_draw": _window_can_draw(), "pipelines": _named(compiled)})
 	if frame_ms < SLOW_FRAME_MS:
 		if not _open_period.is_empty() and _level_seconds - float(_open_period["to_s"]) > SLOW_GAP_S:
 			_close_slow_period()
@@ -229,6 +232,7 @@ func _on_screen_changed(screen: GameMain.Screen) -> void:
 		_slow_unfocused = 0
 		_unfocused_seconds = 0.0
 		_focus_changes = 0
+		_undrawable_seconds = 0.0
 		_slow_periods = []
 		_open_period = {}
 		_decorate_at_start = SurfaceDecorator.build_usec_total
@@ -256,6 +260,7 @@ func _on_level_recorded(stats: LevelStats) -> void:
 	row["slow_periods"] = _slow_periods
 	row["unfocused_s"] = snappedf(_unfocused_seconds, 0.01)
 	row["focus_changes"] = _focus_changes
+	row["undrawable_s"] = snappedf(_undrawable_seconds, 0.01)
 	# Growth across levels here would mean a leak (nodes or objects piling up).
 	row["objects"] = int(Performance.get_monitor(Performance.OBJECT_COUNT))
 	row["nodes"] = int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT))
@@ -283,13 +288,13 @@ func finish() -> void:
 			i + 1, row["level_id"], row["time"], row["damage"], row["deaths"], row["stomps"], row["collected"], row["total"],
 			row["fps_avg"], row["fps_low"], row["worst_frame_ms"], row["load_hitch_ms"], row["errors"], row["warnings"],
 			row.get("hops_landed", 0), row.get("hops", 0), row.get("goals_skipped", 0)])
-	GameLog.info(LOG_TAG, "| # | level | build ms | enter ms | decorate after load ms | load frames ms | pipelines load | pipelines play | hitches | slow frames (unfocused) | unfocused s |")
+	GameLog.info(LOG_TAG, "| # | level | build ms | enter ms | decorate after load ms | load frames ms | pipelines load | pipelines play | hitches | slow frames (unfocused) | unfocused s | undrawable s |")
 	for i in rows.size():
 		var row := rows[i]
-		GameLog.info(LOG_TAG, "| %d | %s | %.2f | %.2f | %.2f | %s | %d | %d | %d | %d (%d) | %.2f |" % [
+		GameLog.info(LOG_TAG, "| %d | %s | %.2f | %.2f | %.2f | %s | %d | %d | %d | %d (%d) | %.2f | %.2f |" % [
 			i + 1, row["level_id"], row.get("build_ms", 0.0), row.get("enter_ms", 0.0), row.get("decorate_after_load_ms", 0.0),
 			row["load_frames_ms"], _sum(row["pipelines_load"]), _sum(row["pipelines_play"]), (row["hitches"] as Array).size(),
-			row["slow_frames"], row["slow_frames_unfocused"], row["unfocused_s"]])
+			row["slow_frames"], row["slow_frames_unfocused"], row["unfocused_s"], row["undrawable_s"]])
 		for hitch: Dictionary in row["hitches"]:
 			GameLog.info(LOG_TAG, "  hitch %s" % hitch)
 		for period: Dictionary in row["slow_periods"]:
@@ -365,6 +370,11 @@ static func _sum(named: Dictionary) -> int:
 
 static func _window_focused() -> bool:
 	return DisplayServer.get_name() == "headless" or DisplayServer.window_is_focused()
+
+
+## False while the OS keeps the window from drawing (occluded / minimised).
+static func _window_can_draw() -> bool:
+	return DisplayServer.get_name() == "headless" or DisplayServer.window_can_draw()
 
 
 static func _window_minimized() -> bool:
