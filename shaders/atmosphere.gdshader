@@ -10,7 +10,8 @@ render_mode unshaded, blend_add, cull_front, depth_draw_never, shadows_disabled;
 uniform vec3 glow_color : source_color = vec3(0.55, 0.9, 1.0);
 uniform float intensity : hint_range(0.0, 4.0) = 0.55;
 uniform float falloff : hint_range(0.5, 8.0) = 2.6;
-// Set by Planet (metres; the mesh is not scaled).
+// Set by Planet, in metres (the shared unit-sphere mesh is scaled by the instance;
+// the maths here is in world space).
 uniform float planet_radius = 10.0;
 uniform float shell_radius = 11.5;
 

@@ -19,7 +19,18 @@ const SPIKE_DIRECTIONS: Array[Vector3] = [
 ]
 const SPIKE_LENGTH := 0.4
 const SPIKE_BASE_RADIUS := 0.11
+## Spike centre above the core surface as a share of its length (0.5 would
+## rest the base on the surface; less sinks it in a little).
+const SPIKE_CENTER_OFFSET := 0.4
+const CORE_RADIUS_FRACTION := 0.8
+const CORE_RIM := 0.7
+const CORE_SPEC := 0.4
+const SPIKE_RIM := 0.5
+const SPIKE_SPEC := 0.6
+## The visual spins this many times faster than the patrol (reads as rolling).
+const ROLL_SPIN_FACTOR := 3.0
 const DEFEAT_TIME := 0.25
+const SQUASHED_SCALE := Vector3(1.6, 0.15, 1.6)
 
 @export var patrol_axis: Vector3 = Vector3.RIGHT
 @export var start_direction: Vector3 = Vector3.UP
@@ -33,6 +44,10 @@ const DEFEAT_TIME := 0.25
 @export var contact_damage: int = 1
 @export var core_color: Color = Color(0.55, 0.12, 0.18)
 @export var spike_color: Color = Color(0.92, 0.9, 0.85)
+
+## Core and spike meshes (with materials) shared by every ball of the same
+## look: built once instead of per ball on the level-load frame.
+static var _visual_cache: Dictionary = {}
 
 var host_planet: Planet = null
 var is_defeated: bool = false
@@ -69,7 +84,7 @@ func _physics_process(delta: float) -> void:
 	if is_defeated:
 		return
 	rotate_object_local(patrol_axis.normalized(), deg_to_rad(patrol_speed_deg) * delta)
-	_visual.rotate_object_local(Vector3.RIGHT, deg_to_rad(patrol_speed_deg) * delta * 3.0)
+	_visual.rotate_object_local(Vector3.RIGHT, deg_to_rad(patrol_speed_deg) * delta * ROLL_SPIN_FACTOR)
 
 
 func ball_up() -> Vector3:
@@ -86,7 +101,7 @@ func defeat() -> void:
 	GameLog.info(LOG_TAG, "%s defeated" % name)
 	defeated.emit(self)
 	var tween := create_tween()
-	tween.tween_property(_visual, "scale", Vector3(1.6, 0.15, 1.6), DEFEAT_TIME)
+	tween.tween_property(_visual, "scale", SQUASHED_SCALE, DEFEAT_TIME)
 	tween.tween_callback(queue_free)
 
 
@@ -110,23 +125,35 @@ func _sphere_shape() -> SphereShape3D:
 
 
 func _build_visual() -> void:
+	var meshes := _visual_meshes()
 	var core := MeshInstance3D.new()
-	var core_mesh := SphereMesh.new()
-	core_mesh.radius = ball_radius * 0.8
-	core_mesh.height = ball_radius * 1.6
-	core_mesh.material = ToonMaterials.make(core_color, 0.7, 0.4)
-	core.mesh = core_mesh
+	core.mesh = meshes[0]
 	_visual.add_child(core)
+	var core_radius := ball_radius * CORE_RADIUS_FRACTION
+	for direction: Vector3 in SPIKE_DIRECTIONS:
+		var dir := direction.normalized()
+		var spike := MeshInstance3D.new()
+		spike.mesh = meshes[1]
+		spike.transform = Transform3D(Basis.looking_at(VectorMath.any_perpendicular(dir), dir),
+			dir * (core_radius + SPIKE_LENGTH * SPIKE_CENTER_OFFSET))
+		_visual.add_child(spike)
+
+
+## [core sphere, spike cone] for this ball's size and colours (cached).
+func _visual_meshes() -> Array[Mesh]:
+	var key := "%s|%s|%s" % [ball_radius, core_color.to_html(), spike_color.to_html()]
+	if _visual_cache.has(key):
+		return _visual_cache[key]
+	var core_mesh := SphereMesh.new()
+	core_mesh.radius = ball_radius * CORE_RADIUS_FRACTION
+	core_mesh.height = core_mesh.radius * 2.0
+	core_mesh.material = ToonMaterials.make(core_color, CORE_RIM, CORE_SPEC)
 	var spike_mesh := CylinderMesh.new()
 	spike_mesh.top_radius = 0.0
 	spike_mesh.bottom_radius = SPIKE_BASE_RADIUS
 	spike_mesh.height = SPIKE_LENGTH
-	spike_mesh.material = ToonMaterials.make(spike_color, 0.5, 0.6, 0.0)
-	for direction: Vector3 in SPIKE_DIRECTIONS:
-		var dir := direction.normalized()
-		var spike := MeshInstance3D.new()
-		spike.mesh = spike_mesh
-		spike.transform = Transform3D(Basis.looking_at(VectorMath.any_perpendicular(dir), dir),
-			dir * (ball_radius * 0.8 + SPIKE_LENGTH * 0.4))
-		_visual.add_child(spike)
+	spike_mesh.material = ToonMaterials.make(spike_color, SPIKE_RIM, SPIKE_SPEC, ToonMaterials.NO_OUTLINE)
+	var meshes: Array[Mesh] = [core_mesh, spike_mesh]
+	_visual_cache[key] = meshes
+	return meshes
 

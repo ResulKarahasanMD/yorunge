@@ -24,12 +24,14 @@ uniform float feature_size = 1.6;
 uniform float rim_strength = 0.35;
 uniform float lava_glow = 3.0;
 uniform float lava_flow_speed = 0.12;
+// Metres per mesh unit: planets share one unit sphere scaled by the instance.
+uniform float object_scale = 1.0;
 
 varying vec3 object_position;
 varying float spec_strength;
 
 void vertex() {
-	object_position = VERTEX;
+	object_position = VERTEX * object_scale;
 }
 
 vec3 ramp(float n) {

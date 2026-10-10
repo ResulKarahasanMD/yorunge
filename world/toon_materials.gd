@@ -7,6 +7,7 @@ const TOON_SHADER := preload("res://shaders/toon.gdshader")
 const OUTLINE_SHADER := preload("res://shaders/outline.gdshader")
 const OUTLINE_COLOR := Color(0.07, 0.05, 0.12)
 const DEFAULT_OUTLINE_WIDTH := 0.022
+const NO_OUTLINE := 0.0
 
 
 static func make(albedo: Color, rim_strength: float = 0.6, spec_strength: float = 0.3,

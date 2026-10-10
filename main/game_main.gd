@@ -13,6 +13,7 @@ enum Screen { MAIN_MENU, LEVEL_SELECT, SETTINGS, PLAYING, PAUSED, LEVEL_COMPLETE
 
 const LOG_TAG := "Main"
 const QUIT_SETTLE_FRAMES := 5
+const USEC_PER_MSEC := 1000.0
 const MENU_BACKDROP := preload("res://world/menu_backdrop.tscn")
 
 @export var retry_delay: float = 1.5
@@ -23,6 +24,10 @@ var level: Level = null
 var screen: Screen = Screen.MAIN_MENU
 var autopilot: MenuAutopilot = null
 var report: DemoReport = null
+## Wall-clock phases of the last level load in ms (DemoReport, load probe):
+## build = generate + build / instantiate, enter = add_child (every _ready),
+## decorate = the part of enter spent scattering props, total = whole load call.
+var load_profile: Dictionary = {}
 
 var _deaths: int = 0
 var _settings_return: Screen = Screen.MAIN_MENU
@@ -42,6 +47,9 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	level_host.process_mode = Node.PROCESS_MODE_PAUSABLE
 	_wire_screens()
+	# First-time particle setup took ~16 ms on the first level's load frame;
+	# behind the title screen it costs nothing visible.
+	Vfx.prewarm(level_host)
 	if DemoMode.is_active():
 		autopilot = MenuAutopilot.new()
 		autopilot.name = "MenuAutopilot"
@@ -168,15 +176,20 @@ func next_level() -> void:
 
 ## Tutorial scene or freshly generated endless level for the current position.
 func _load_current() -> void:
+	var started := Time.get_ticks_usec()
+	var next: Level
 	if GameState.mode == GameStateManager.Mode.ENDLESS:
-		var started := Time.get_ticks_usec()
 		var spec := GameState.current_endless_spec()
-		var built := LevelBuilder.build(spec)
+		next = LevelBuilder.build(spec)
 		GameLog.info(LOG_TAG, "generated %s: %d planets, %d enemies in %.1f ms" % [
-			spec.level_id(), spec.planets.size(), spec.enemies.size(), float(Time.get_ticks_usec() - started) / 1000.0])
-		_spawn_level(built)
+			spec.level_id(), spec.planets.size(), spec.enemies.size(), _msec_since(started)])
 	else:
-		_spawn_level((load(GameState.current_level_path()) as PackedScene).instantiate() as Level)
+		next = (load(GameState.current_level_path()) as PackedScene).instantiate() as Level
+	var build_ms := _msec_since(started)
+	_spawn_level(next)
+	load_profile["build_ms"] = build_ms
+	load_profile["total_ms"] = _msec_since(started)
+	GameLog.info(LOG_TAG, "load profile %s: %s" % [level.level_id, load_profile])
 
 
 func _spawn_level(next: Level) -> void:
@@ -184,7 +197,13 @@ func _spawn_level(next: Level) -> void:
 	_hide_backdrop()
 	_unload_level()
 	level = next
+	var entering := Time.get_ticks_usec()
+	var decorate_before := SurfaceDecorator.build_usec_total
 	level_host.add_child(level)
+	load_profile = {
+		"enter_ms": _msec_since(entering),
+		"decorate_ms": snappedf(float(SurfaceDecorator.build_usec_total - decorate_before) / USEC_PER_MSEC, 0.01),
+	}
 	level.completed.connect(_on_level_completed)
 	level.failed.connect(_on_level_failed)
 	hud.bind(level)
@@ -318,6 +337,10 @@ func _hide_backdrop() -> void:
 		level_host.remove_child(_backdrop)
 		_backdrop.queue_free()
 		_backdrop = null
+
+
+static func _msec_since(started_usec: int) -> float:
+	return snappedf(float(Time.get_ticks_usec() - started_usec) / USEC_PER_MSEC, 0.01)
 
 
 static func _level_id(path: String) -> String:

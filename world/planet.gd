@@ -15,6 +15,7 @@ const ATMOSPHERE_SEGMENTS := 48
 const ATMOSPHERE_RINGS := 24
 const SURFACE_SHADER := preload("res://shaders/planet_surface.gdshader")
 const ATMOSPHERE_SHADER := preload("res://shaders/atmosphere.gdshader")
+const UNIT_RADIUS := 1.0
 
 @export_range(1.0, 60.0, 0.1, "or_greater") var radius: float = 10.0:
 	set = set_radius
@@ -38,6 +39,12 @@ const ATMOSPHERE_SHADER := preload("res://shaders/atmosphere.gdshader")
 @export var decorate: bool = true
 ## Non-zero overrides the name-based decoration seed (generated levels).
 @export var decoration_seed: int = 0
+
+## Unit spheres shared by every planet and scaled per instance: a SphereMesh
+## per planet was generated and uploaded to the GPU on the level-load frame
+## (about 1 ms each in a window).
+static var _unit_surface: SphereMesh = null
+static var _unit_shell: SphereMesh = null
 
 var gravity_source: GravitySource
 var _collision: CollisionShape3D
@@ -84,26 +91,28 @@ func decoration_count() -> int:
 	return _decorator.instance_total if _decorator != null else 0
 
 
+## Decorations requested but not built yet (they follow the load frame).
+func decoration_pending() -> bool:
+	return _decorator != null and _decorator.is_pending()
+
+
 func _build_children() -> void:
 	_collision = CollisionShape3D.new()
 	_collision.name = "Collision"
 	_collision.shape = SphereShape3D.new()
 	add_child(_collision)
 
+	if _unit_surface == null:
+		_unit_surface = _unit_sphere(MESH_RADIAL_SEGMENTS, MESH_RINGS)
+		_unit_shell = _unit_sphere(ATMOSPHERE_SEGMENTS, ATMOSPHERE_RINGS)
 	_mesh_instance = MeshInstance3D.new()
 	_mesh_instance.name = "Surface"
-	var sphere := SphereMesh.new()
-	sphere.radial_segments = MESH_RADIAL_SEGMENTS
-	sphere.rings = MESH_RINGS
-	_mesh_instance.mesh = sphere
+	_mesh_instance.mesh = _unit_surface
 	add_child(_mesh_instance)
 
 	_atmosphere = MeshInstance3D.new()
 	_atmosphere.name = "Atmosphere"
-	var shell := SphereMesh.new()
-	shell.radial_segments = ATMOSPHERE_SEGMENTS
-	shell.rings = ATMOSPHERE_RINGS
-	_atmosphere.mesh = shell
+	_atmosphere.mesh = _unit_shell
 	_atmosphere.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var glow := ShaderMaterial.new()
 	glow.shader = ATMOSPHERE_SHADER
@@ -121,17 +130,23 @@ func _build_children() -> void:
 		add_child(gravity_source)
 
 
+static func _unit_sphere(segments: int, rings: int) -> SphereMesh:
+	var sphere := SphereMesh.new()
+	sphere.radius = UNIT_RADIUS
+	sphere.height = UNIT_RADIUS * 2.0
+	sphere.radial_segments = segments
+	sphere.rings = rings
+	return sphere
+
+
 func _apply_radius() -> void:
 	(_collision.shape as SphereShape3D).radius = radius
-	var sphere := _mesh_instance.mesh as SphereMesh
-	sphere.radius = radius
-	sphere.height = radius * 2.0
-	var shell := _atmosphere.mesh as SphereMesh
-	shell.radius = radius * atmosphere_scale
-	shell.height = radius * atmosphere_scale * 2.0
+	_mesh_instance.scale = Vector3.ONE * (radius / UNIT_RADIUS)
+	var shell_radius := radius * atmosphere_scale
+	_atmosphere.scale = Vector3.ONE * (shell_radius / UNIT_RADIUS)
 	var glow := _atmosphere.material_override as ShaderMaterial
 	glow.set_shader_parameter(&"planet_radius", radius)
-	glow.set_shader_parameter(&"shell_radius", shell.radius)
+	glow.set_shader_parameter(&"shell_radius", shell_radius)
 	if gravity_source != null:
 		gravity_source.strength = gravity_strength
 		gravity_source.surface_radius = radius
@@ -142,6 +157,7 @@ func _apply_radius() -> void:
 func _apply_style() -> void:
 	var surface := ShaderMaterial.new()
 	surface.shader = SURFACE_SHADER
+	surface.set_shader_parameter(&"object_scale", radius / UNIT_RADIUS)
 	if style != null:
 		surface.set_shader_parameter(&"surface_type", int(style.surface))
 		surface.set_shader_parameter(&"color_low", style.color_low)
@@ -151,7 +167,10 @@ func _apply_style() -> void:
 		(_atmosphere.material_override as ShaderMaterial).set_shader_parameter(&"glow_color", style.atmosphere_color)
 	_mesh_instance.material_override = surface
 	if decorate:
-		_decorator.build(radius, style, _decoration_seed())
+		if Engine.is_editor_hint():
+			_decorator.build(radius, style, _decoration_seed())
+		else:
+			_decorator.build_deferred(radius, style, _decoration_seed())
 
 
 ## Stable per planet: name and size, so tutorial levels look the same every run.

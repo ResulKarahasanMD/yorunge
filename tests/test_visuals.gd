@@ -1,6 +1,7 @@
 extends TestSuite
 ## Visual building blocks that can be checked without a GPU: decoration counts
-## and determinism, toon material wiring, planet shader parameters.
+## and determinism, toon material wiring, planet shader parameters, and the
+## load-frame savings (shared meshes, decorations spread over later frames).
 
 const GRASS := preload("res://world/styles/grass.tres")
 const LAVA := preload("res://world/styles/lava.tres")
@@ -8,6 +9,12 @@ const PLANET_SCENE := preload("res://world/planet.tscn")
 const RADIUS := 10.0
 const HUGE_RADIUS := 60.0
 const SEED := 12345
+const SPIKE_SCENE := preload("res://world/spike_ball.tscn")
+const SMALL_RADIUS := 4.0
+const SPREAD_PLANETS := 3
+## Frames a deferred decoration may need (the request frame is skipped).
+const DECORATION_FRAMES := 3
+const SIZE_EPSILON := 0.01
 
 
 func _decorator(radius: float, style: PlanetStyle, seed_value: int) -> SurfaceDecorator:
@@ -73,4 +80,69 @@ func test_planet_applies_style_to_shader() -> void:
 	check(surface.get_shader_parameter(&"color_accent") == LAVA.color_accent, "accent colour forwarded")
 	var glow := (planet.get_node(^"Atmosphere") as MeshInstance3D).material_override as ShaderMaterial
 	check_near(glow.get_shader_parameter(&"shell_radius"), 7.0 * planet.atmosphere_scale, "atmosphere shell radius forwarded")
+	check(planet.decoration_pending(), "decoration waits for a later frame")
+	for i in DECORATION_FRAMES:
+		await tree.process_frame
 	check(planet.decoration_count() > 0, "planet decorated")
+
+
+## Every planet draws the same unit spheres, scaled by the instance: no ground
+## or atmosphere mesh is generated (and uploaded) per planet on the load frame.
+func test_planets_share_unit_spheres() -> void:
+	var small := _planet(Vector3.ZERO, SMALL_RADIUS, GRASS)
+	var big := _planet(Vector3(40.0, 0.0, 0.0), RADIUS, LAVA)
+	var small_ground := small.get_node(^"Surface") as MeshInstance3D
+	var big_ground := big.get_node(^"Surface") as MeshInstance3D
+	var small_air := small.get_node(^"Atmosphere") as MeshInstance3D
+	var big_air := big.get_node(^"Atmosphere") as MeshInstance3D
+	check(small_ground.mesh == big_ground.mesh, "ground mesh shared")
+	check(small_air.mesh == big_air.mesh, "atmosphere mesh shared")
+	check_near(big_ground.get_aabb().size.y * big_ground.scale.y, RADIUS * 2.0, "ground spans the planet diameter (pole to pole)", SIZE_EPSILON)
+	check_near(big_air.get_aabb().size.y * big_air.scale.y, RADIUS * 2.0 * big.atmosphere_scale, "atmosphere spans the shell (pole to pole)", SIZE_EPSILON)
+	var ground := big_ground.material_override as ShaderMaterial
+	check_near(ground.get_shader_parameter(&"object_scale"), RADIUS, "surface noise stays in metres")
+
+
+## A level's planets decorate after the load frame, at most one per frame.
+func test_decorations_follow_the_load_frame_one_planet_per_frame() -> void:
+	var planets: Array[Planet] = []
+	for i in SPREAD_PLANETS:
+		planets.append(_planet(Vector3(40.0 * i, 0.0, 0.0), SMALL_RADIUS, GRASS))
+	var decorated: Array[int] = [_decorated(planets)]
+	for i in SPREAD_PLANETS + DECORATION_FRAMES:
+		await tree.process_frame
+		decorated.append(_decorated(planets))
+	var largest_step := 0
+	for i in range(1, decorated.size()):
+		largest_step = maxi(largest_step, decorated[i] - decorated[i - 1])
+	check(decorated[0] == 0, "nothing decorated on the load frame (%s)" % [decorated])
+	check(largest_step == 1, "one planet per frame (%s)" % [decorated])
+	check(decorated[-1] == SPREAD_PLANETS, "every planet decorated in the end (%s)" % [decorated])
+
+
+## Spike balls of the same look share their meshes and materials.
+func test_spike_balls_share_visuals() -> void:
+	var planet := _planet(Vector3.ZERO, RADIUS, GRASS)
+	var balls: Array[SpikeBall] = []
+	for i in 2:
+		var ball := SPIKE_SCENE.instantiate() as SpikeBall
+		planet.add_child(ball)
+		balls.append(ball)
+	var first := balls[0].get_node(^"Body/Visual")
+	var second := balls[1].get_node(^"Body/Visual")
+	check(first.get_child_count() == SpikeBall.SPIKE_DIRECTIONS.size() + 1, "core plus one cone per spike")
+	check((first.get_child(0) as MeshInstance3D).mesh == (second.get_child(0) as MeshInstance3D).mesh, "core mesh shared")
+	check((first.get_child(1) as MeshInstance3D).mesh == (second.get_child(1) as MeshInstance3D).mesh, "spike mesh shared")
+
+
+func _planet(at: Vector3, radius: float, style: PlanetStyle) -> Planet:
+	var planet := PLANET_SCENE.instantiate() as Planet
+	planet.radius = radius
+	planet.style = style
+	planet.position = at
+	spawn(planet)
+	return planet
+
+
+static func _decorated(planets: Array[Planet]) -> int:
+	return planets.filter(func(planet: Planet) -> bool: return planet.decoration_count() > 0).size()
