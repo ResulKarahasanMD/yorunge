@@ -1,0 +1,13 @@
+# Godot 4+ specific ignores
+.godot/
+/android/
+
+# Local tooling configs carrying the Beckett MCP token — never commit
+.beckett/
+.mcp.json
+.cursor/
+.vscode/
+.claude/settings.local.json
+
+# OS noise
+.DS_Store
