@@ -11,3 +11,6 @@
 
 # OS noise
 .DS_Store
+
+# Run outputs (screenshots, reports); kept locally, not versioned
+out_*/

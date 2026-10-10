@@ -22,6 +22,7 @@ const MENU_BACKDROP := preload("res://world/menu_backdrop.tscn")
 var level: Level = null
 var screen: Screen = Screen.MAIN_MENU
 var autopilot: MenuAutopilot = null
+var report: DemoReport = null
 
 var _deaths: int = 0
 var _settings_return: Screen = Screen.MAIN_MENU
@@ -46,6 +47,10 @@ func _ready() -> void:
 		autopilot.name = "MenuAutopilot"
 		autopilot.main = self
 		add_child(autopilot)
+		report = DemoReport.new()
+		report.name = "DemoReport"
+		report.main = self
+		add_child(report)
 	show_main_menu()
 
 
@@ -217,6 +222,8 @@ func finish_demo() -> void:
 	GameLog.info(LOG_TAG, "run finished: %d levels" % GameState.history.size())
 	for stats: LevelStats in GameState.history:
 		GameLog.info(LOG_TAG, "  %s" % stats.to_dict())
+	if report != null:
+		report.finish()
 	if DemoMode.should_exit_on_finish():
 		quit_game()
 
@@ -225,6 +232,8 @@ func finish_demo() -> void:
 ## playbacks for a few frames, then quit (otherwise they leak at exit).
 func quit_game() -> void:
 	GameLog.info(LOG_TAG, "quit")
+	if report != null:
+		report.detach()
 	if AudioSystem.current != null:
 		AudioSystem.current.stop_all()
 	for i in QUIT_SETTLE_FRAMES:

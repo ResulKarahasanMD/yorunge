@@ -254,7 +254,7 @@ func _after_slide(pre_slide_velocity: Vector3) -> void:
 
 func _update_heat(delta: float) -> void:
 	var damage := 0
-	if is_on_floor() and current_planet != null and current_planet.style != null:
+	if is_on_floor() and current_planet != null and current_planet.style != null and not health.immune:
 		damage = current_planet.style.contact_damage
 	if damage <= 0:
 		heat = maxf(0.0, heat - delta / cool_time)

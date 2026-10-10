@@ -14,6 +14,8 @@ const SUITES: Array[String] = [
 	"res://tests/test_audio.gd",
 	"res://tests/test_save.gd",
 	"res://tests/test_generator.gd",
+	"res://tests/test_report.gd",
+	"res://tests/test_leaks.gd",
 ]
 
 
@@ -36,7 +38,8 @@ func _run_all() -> void:
 				continue
 			tests += 1
 			suite.begin(method_name)
-			suite.call(method_name)
+			# Plain tests return at once; coroutine tests (frames to settle) are waited for.
+			await suite.call(method_name)
 			suite.cleanup()
 		suite.teardown_suite()
 		total_checks += suite.checks

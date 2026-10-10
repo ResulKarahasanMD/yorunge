@@ -13,6 +13,8 @@ const LOG_TAG := "Health"
 var hearts: int = 0
 ## Total hearts lost since the level started (level stats).
 var damage_taken: int = 0
+## Set once the level is won: nothing hurts the explorer any more.
+var immune: bool = false
 
 var _invulnerable_left: float = 0.0
 
@@ -33,9 +35,9 @@ func is_dead() -> bool:
 	return hearts <= 0
 
 
-## Applies damage unless invulnerable or already dead. Returns true when it hit.
+## Applies damage unless immune, invulnerable or already dead. Returns true when it hit.
 func take_damage(amount: int, cause: String) -> bool:
-	if amount <= 0 or is_dead() or is_invulnerable():
+	if amount <= 0 or immune or is_dead() or is_invulnerable():
 		return false
 	hearts = maxi(hearts - amount, 0)
 	damage_taken += amount

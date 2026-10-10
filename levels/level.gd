@@ -234,6 +234,9 @@ func _on_portal_entered() -> void:
 		return
 	_finished = true
 	_fill_stats(true)
+	# The summary screen follows after the portal effects; lava or an enemy
+	# must not take a heart in between.
+	player.health.immune = true
 	GameLog.info(LOG_TAG, "completed %s: %s" % [level_id, stats.to_dict()])
 	completed.emit(stats)
 

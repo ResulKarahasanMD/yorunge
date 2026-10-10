@@ -11,6 +11,8 @@ const POP_TIME := 0.18
 const HEART_SIZE := Vector2(30, 28)
 const FLASH_ALPHA := 0.35
 const FLASH_TIME := 0.4
+const TITLE_OUTLINE := 10
+const TITLE_OUTLINE_COLOR := Color(0.02, 0.02, 0.08, 1.0)
 
 var _level: Level = null
 var _banner_tween: Tween = null
@@ -27,6 +29,9 @@ var _banner_tween: Tween = null
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# Readable over bright lava and ice behind the title.
+	_title.add_theme_constant_override(&"outline_size", TITLE_OUTLINE)
+	_title.add_theme_color_override(&"font_outline_color", TITLE_OUTLINE_COLOR)
 	_banner.modulate.a = 0.0
 	_hint_panel.hide()
 

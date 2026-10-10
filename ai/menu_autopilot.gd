@@ -107,5 +107,5 @@ func _delay(seconds: float) -> void:
 
 
 static func _float_flag(prefix: String, fallback: float) -> float:
-	var value := FrameCapture._arg_value(prefix)
+	var value := DemoMode.option(prefix, "")
 	return value.to_float() if value.is_valid_float() else fallback

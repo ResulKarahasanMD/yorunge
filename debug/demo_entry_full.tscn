@@ -1,0 +1,10 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://debug/demo_entry.gd" id="1_entry"]
+
+[node name="DemoEntryFull" type="Node"]
+script = ExtResource("1_entry")
+endless_levels = 5
+endless_seed = 2026
+report_dir = "user://demo_report"
+fresh_save = true

@@ -10,7 +10,7 @@
 | (e) Ses + juice | `me` | ✅ | 2026-10-10 |
 | (f) Menüler + kayıt | `mf` | ✅ | 2026-10-10 |
 | (g) Prosedürel mod | `mg` | ✅ | 2026-10-10 |
-| (h) Uçtan uca DemoBot testi | `mh` | ⏳ sürüyor | |
+| (h) Uçtan uca DemoBot testi | `mh` | ✅ | 2026-10-10 |
 
 ## (0) Kurulum — 2026-10-10
 - Git deposu açıldı, tek dal `main`.
@@ -323,6 +323,96 @@ Beckett MCP oturumu bu revizyon sırasında koptu (Godot 8770'te dinliyor, Claud
 - **Beckett** (`endless_probe`, seed 2026 derinlik 5): ekran görüntüsü tutarlı (buz + çimen gezegenleri + diken). FPS 113,8 ort; tek 0,53 sn takılma yine bir Beckett işlemine bitişik. Bağımsız ölçüm (h)'de oyun içi kare süresi raporuyla yapılacak.
 - **Testler:** **1722 kontrol, 0 hata.**
 
+## (h) Uçtan uca DemoBot testi — 2026-10-10
+### Kod
+- `ai/DemoReport` (yalnız demo modunda). Her seviye için oyun içinde gerçek zamanlı ölçüyor:
+  - Ortalama FPS, %1 düşük (= 1 / p99 kare süresi), en kötü kare ve seviyedeki anı.
+  - Seviyenin ilk 5 karesi (sahne kurulumu) `load_hitch_ms`, ekran görüntüsünden sonraki 3 kare (GPU okuması) `screenshot_ms` olarak **ayrı sütunda** raporlanıyor. FPS istatistiğinden çıkarılıyorlar ama gizlenmiyorlar.
+  - Hata ve uyarı sayısı: `OS.add_logger` ile hem motor hem script mesajları.
+  - LevelStats, DemoBot sayaçları (zıplama/inen, atlanan hedef, ezme denemesi).
+  - Seviye sonunda nesne, düğüm ve artık (orphan) düğüm sayısı.
+  - 6. saniyede ekran görüntüsü; PNG işçi iş parçacığında yazılıyor.
+  - Sonda tablo basıp `demo_report.json` yazıyor.
+- `DemoMode.option()`: seçenek önce komut satırından, yoksa demo giriş sahnesinden okunuyor. `debug/demo_entry_full.tscn`: 3 tutorial + 5 sonsuz (seed 2026), temiz demo profili, rapor `user://demo_report`.
+- `GameMain.quit_game()` çıkmadan önce raporu ayırıyor: PNG görevlerini bekliyor, logger'ı kaldırıyor.
+- **Portal sonrası dokunulmazlık:** `PlayerHealth.immune` portal girişinde açılıyor. Hasar gelmiyor, lav ısısı birikmiyor.
+- HUD başlığına 10 px koyu dış hat eklendi.
+- Test koşucusu artık kare bekleyen (coroutine) testleri de bekliyor. Yeni testler: `test_report` (9 kontrol), `test_leaks` (4), `test_level_flow` +6 (lav kontrolü ve portal sonrası güvenlik).
+
+### Bulunan ve düzeltilen sorunlar
+| Sorun | Sebep | Düzeltme | Kanıt |
+|---|---|---|---|
+| **Portala girdikten sonra lavda kalp kaybı** | Seviye bittikten sonraki 1,2 sn'lik portal efekti sırasında oyuncu hâlâ hasar alabiliyordu. Final koşuda bu iki kez oldu: E2 ve E3 bitince, portal lav gezegenindeydi. Log `completed` satırından sonra `[Health] -1 (lava) hearts=2` diyordu. İstatistiğe girmiyordu ama kalp, hasar sesi, parçacık, hit-stop ve kırmızı parlama oluyordu. | `PlayerHealth.immune` portal girişinde açılıyor, ısı birikmiyor | Testler: kontrol olarak lavda 90 karede ≥ 1 hasar; portal sonrası 90 kare lavda hasar 0, ısı 0, oyuncu zeminde. Logda bitişten sonraki hasar olayı: düzeltmeden önce final koşuda 2, headless 3+8'de 3; düzeltmeden sonra headless 3+5'te **0**. Süreler, zıplamalar ve toplam hasar değişmedi. |
+| Ekran görüntüleri diske yazılmıyordu | İşçi görevine bağlanan Callable, Image'ı zayıf tutuyordu | Lambda yakalaması | 8/8 PNG |
+| Ekran görüntüleri yanlış seviye adıyla kaydediliyordu | `await frame_post_draw` bazen bir sonraki seviyede dönüyordu | Beklemeden, son çizilen kare okunuyor | Dosya adları içerikle eşleşiyor |
+| Pencereli koşu çıkışta çöküyordu (signal 11, exit 134) | GDScript Logger çıkışta hâlâ kayıtlıydı | Çıkıştan önce `detach()` | Sonraki 4 pencereli koşunun hepsi exit 0 |
+| HUD başlığı parlak lav/buz önünde okunmuyordu | Dış hat yoktu | 10 px koyu dış hat | Görüntü kırpıntıları |
+| Rapor başlığında `%%` | Biçim dizesi | Düzeltildi | — |
+
+### Koşular
+Hepsi aynı plan: menü → 3 tutorial (T2'de duraklat → Ayarlar → hassasiyet → Geri → Devam) → Sonsuz → seed 2026 → 5 seviye → Ana menü → çıkış.
+
+| Koşu | Ortam | Seviye | Hata / uyarı | Seviye süreleri toplamı | Hasar | Ezme | Zıplama | FPS (kare ağırlıklı) | %1 düşük < 60 olan seviye | En kötü kare |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Headless | `--fixed-fps 60`, 3 + 8 seviye | 11 | 0 / 0 | 295,87 sn | 2 | 2 | 58/60 | anlamsız | — | — |
+| Headless, düzeltme sonrası | `--fixed-fps 60`, son kod | 8 | 0 / 0 | 193,83 sn | 1 | 1 | 36/37 | anlamsız | — | — |
+| Beckett 1 | editöre gömülü, 120 Hz | 8 | 0 / 0 | 193,87 sn | 1 | 1 | 36/37 | 118,6 | 0/8 | 313,5 ms |
+| Beckett 2 | editöre gömülü, 120 Hz | 8 | 0 / 0 | 193,90 sn | 1 | 1 | 36/37 | 118,8 | 0/8 | 1006,8 ms (E3) |
+| Pencereli 1 | bağımsız, 144 Hz | 8 | 0 / 0 | 193,96 sn | 1 | 1 | 36/37 | 131,0 | 2/8 (E4 33,1; E5 31,2) | 94,5 ms |
+| Yalnız tutorial | bağımsız, 120 Hz | 3 | 0 / 0 | 56,30 sn | 0 | 0 | 7/7 | 119,2 | 0/3 | 1122,0 ms (T2, 10,21 sn) |
+| **Final** | bağımsız, 144 Hz | 8 | 0 / 0 | 193,91 sn | 1 | 1 | 36/37 | **129,0** | 2/8 (E3 32,0; E4 33,2) | 1047,3 ms (E5, 1,86 sn) |
+| vsync kapalı | bağımsız, 144 Hz; testlerimle paralel koştu | 8 | 0 / 0 | 193,79 sn | 1 | 1 | 36/37 | 108,3 | 6/8 (T3–E5, 31–34) | 86,6 ms |
+
+- Oynanış deterministik: seviye süreleri koşular arasında en çok 0,05 sn farklı; hasar, ezme ve zıplama sayıları aynı.
+- Pencereli 1 çıkışta çökmüştü (yukarıdaki düzeltme). Ondan sonraki pencereli koşuların hepsi exit 0.
+- `--disable-vsync` macOS pencere kipinde kare hızını açmadı (T1/T2 yine 144,5–144,9 FPS). Bu yüzden tavansız kare maliyeti ölçülemedi.
+
+### Final koşu (pencereli, 1280×720, 144 Hz ekran)
+Exit 0, hata 0, uyarı 0. Koşu 218,3 sn; seviye süreleri toplamı 193,91 sn.
+
+| # | Seviye | Süre (sn) | Hasar | Ölüm | Ezme | Toz | FPS ort | %1 düşük | En kötü kare ms (sn) | Yükleme ms | Zıplama | Atlanan hedef |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | tutorial_01 | 19,26 | 0 | 0 | 0 | 5/5 | 143,4 | 110,3 | 43,0 (10,05) | 46,9 | 2/2 | 0 |
+| 2 | tutorial_02 | 16,50 | 0 | 0 | 0 | 5/5 | 144,9 | 119,4 | 9,4 | 21,6 | 3/3 | 0 |
+| 3 | tutorial_03 | 20,56 | 0 | 0 | 0 | 5/5 | 142,5 | 112,9 | 67,1 (8,01) | 27,4 | 2/2 | 0 |
+| 4 | E1 #1850228613 | 17,28 | 0 | 0 | 0 | 5/5 | 144,9 | 123,9 | 8,8 | 20,1 | 2/2 | 0 |
+| 5 | E2 #1573045651 | 23,02 | 0 | 0 | 0 | 5/5 | 144,8 | 118,9 | 20,8 | 21,8 | 5/5 | 0 |
+| 6 | E3 #1092744277 | 33,18 | 0 | 0 | 0 | 5/5 | 97,1 | 32,0 | 63,0 (27,63) | 22,6 | 7/8 | 0 |
+| 7 | E4 #441252939 | 22,75 | 1 | 0 | 0 | 5/5 | 111,9 | 33,2 | 69,8 | 31,7 | 6/6 | 0 |
+| 8 | E5 #1670399091 | 41,36 | 0 | 0 | 1 | 5/5 | 129,1 | 99,6 | 1047,3 (1,86) | 29,2 | 9/9 | 0 |
+
+- E4'teki hasar dikenli küreden. Bot 8 seviyede 13 ezme denemesi yaptı, 1'i başarılı.
+- Ekran görüntüleri (her seviyeden bir tane, 6. saniye) ve rapor: `out_20261010_mh/` (git dışı; `01_tutorial_01.png` … `08_endless_1670399091_5.png`, `grid.png`, `demo_report.json`, `run.log`). Sekiz karede HUD sayacı, kalpler ve başlık doğru. E4'te 2 kalp görünüyor (hasar 1). Türkçe karakterler doğru.
+
+### Performans yorumu
+- **Ortalama:** final koşuda her seviyede ≥ 97 FPS, kare ağırlıklı 129,0 FPS. 60 FPS hedefi ortalamada sağlanıyor.
+- **%1 düşük:** final koşuda 8 seviyenin 5'inde ≥ 110 FPS; E3 ve E4'te ~32 FPS. Aynı seviyeler başka koşularda iyi (E3: pencereli 1'de 120,7, Beckett 2'de 96,9). Hangi seviyenin düştüğü koşudan koşuya değişiyor; oynanış ise aynı. Yani düşüş oyundaki belirli bir olaya bağlı görünmüyor.
+- **~1 sn'lik tek kare takılmalar:** 5 gerçek zamanlı koşunun 3'ünde birer kez görüldü, her seferinde farklı seviyede ve anda.
+- **Ölçüm sırasında makinenin durumu** (ölçüldü):
+  - Unity Editor 20:42'den beri açıktı; 23:36'da %247 CPU ve 9,3 GB bellek kullanıyordu.
+  - Takas 4,2–4,9 GB'tı; vsync kapalı koşu sırasında takas alanı 5 GB'tan 6 GB'a büyüdü.
+  - Yük ortalaması 11 çekirdekte 7–10 arasındaydı.
+- **A/B deneyi:** yalnız tutorial, pencereli, 144 Hz; iki koşu arka arkaya.
+  - Olduğu gibi: kare ağırlıklı 140,6 FPS, %1 düşük 98,3 / 124,2 / 122,6.
+  - 11 ek meşgul döngüyle (`yes`, yük ortalaması 8 → 20): 142,0 FPS, %1 düşük 115,3 / 124,5 / 124,9.
+  - **Saf CPU yükü düşüş üretmedi.** macOS ön plandaki oyunu muhtemelen öne alıyor.
+  - Buna karşılık vsync kapalı koşu, bellek kullanan headless Godot test süreçlerimle paralel koştuğunda T3'ten sonraki her seviyede %1 düşük 31–34 FPS'e indi. Aynı sürede takas alanı 5 GB'tan 6 GB'a büyüdü. Bu, önceki koşulardaki ~32 FPS iziyle aynı.
+  - En güçlü aday **bellek baskısı** (Unity 9,3 GB + takas). **Kanıtlanmadı.** Makine zaten takastayken bilerek bellek baskısı deneyi yapmadım.
+  - Tek tek ~1 sn'lik takılmalar iki koşulda da görüldü (yüklü koşuda T1'de 774,8 ms).
+- **Seviye yükleme karesi:** final koşuda 20–47 ms (tek kare). Ekran görüntüsü karesi 7,5–19 ms; yalnız demo raporunda oluyor.
+
+### Sızıntı ölçümü
+- **`test_leaks`:** aynı üretilmiş seviye (`endless_591407285_6`) 1 ısınma + 6 kez yüklenip boşaltıldı, GameMain'in yaptığı gibi.
+  - Nesne sayısı [1766, 1765, 1766, 1765, 1766, 1765] (±1 geçici).
+  - Kaynak 127 → 127, ağaçtaki düğüm 16 → 16, artık düğüm 0.
+  - Testin sızıntıyı yakaladığı da gösterildi: her yüklemede 1 `Node` sızdıran kasıtlı bir mutantta nesne sayısı [1741 … 1746] diye artıyor ve test 2 kontrolle kırılıyor. Mutant tek seferlik bir scratch betiğiydi, depoda yok.
+- **Headless 3 + 8 seviyelik koşu:** her seviyenin sonunda artık düğüm 0. Nesne sayısı düğüm sayısıyla birlikte değişiyor. Doğrusal modelde seviye sırasının katsayısı 3,0 ± 1,8 nesne/seviye (%95 GA −1,3…7,3), yani sıfırdan ayırt edilemiyor. Her seviye `GameState.history`'ye kasıtlı olarak bir `LevelStats` ekliyor.
+
+- **Beckett, son kodla** (`demo_entry_full`, editöre gömülü): T1 5/5 → seviye sonu → T2 yüklendi. `game_logs level=warning`: 0 kayıt. Ekran görüntüsünde T2 buz gezegeni, HUD "1 / 5", dış hatlı başlık "2 · Sıçrayış", 3 kalp ve buz ipucu var. Koşu T2'de durduruldu.
+
+### Testler
+**1741 kontrol, 0 hata** ((g)'de 1722). `test_leaks` ve yeni lav testleri, gerçek fizik kareleri beklediği için koşu ~10 sn uzadı.
+
 ## Çalışma modu (2026-10-10, kullanıcı)
 b→h tek oturumda, onay beklemeden. Her milestone'da şu adımlar:
 1. Testler.
@@ -361,6 +451,9 @@ _(kullanıcı sonradan değiştirebilir; her biri gerekçesiyle)_
 - **En küçük gezegen boşluğu 3,0 m** (ölçüm: 2,5 m'de kafa çarpması).
 - **Sonsuz mod tek bir başlangıç seed'inden derinlikle ilerliyor;** her derinliğin kendi türetilmiş seed'i var (HUD'da #seed). Seed alanına kelime de yazılabiliyor.
 - **Sonsuz modda zorluk:** boşluk, gezegen sayısı, lav oranı ve düşman sayısı derinlikle artıyor; derinlik 1'de düşman yok.
+- **(h) "3 tutorial + 5 seed" yorumu:** tek bir sonsuz koşu, başlangıç seed'i 2026, derinlik 1–5. Bu 5 farklı türetilmiş seed demek: 1850228613, 1573045651, 1092744277, 441252939, 1670399091; zorluk her seviyede artıyor. Gerekçe: oyuncunun gerçekte oynadığı akış bu (Sonsuz Mod → seed → ardışık seviyeler). Alternatif: derinlik 1'de 5 ayrı başlangıç seed'i.
+- **FPS ölçüsü:** %1 düşük = 1 / p99 kare süresi. Seviye yükleme kareleri (ilk 5) ve ekran görüntüsü kareleri (3) FPS'ten çıkarılıp ayrı sütunda raporlanıyor. Ekran görüntüsü her seviyenin 6. saniyesinde alınıyor.
+- **Portala giren kaşif dokunulmaz:** seviye bittikten sonra lav ya da diken kalp götürmüyor (özet ekranı 1,2 sn sonra geliyor).
 
 ## Ölçümler
 | Milestone | Sahne | FPS ort | FPS min | draw call ort | physics_process ort | Not |
@@ -372,10 +465,12 @@ _(kullanıcı sonradan değiştirebilir; her biri gerekçesiyle)_
 | (d) | gallery (4 tip, sabit kamera) | 119,8 | 118 | 80 | 1,4 ms | 10 sn, shader'lar + dekor + glow |
 | (d) | tutorial_01 demo | 119,6 | 117 | 77 | 3,5 ms | 10 sn |
 | (e) | demo T1→T3 (ses + parçacık + sarsıntı) | 119,5 | 117 | 90 | 1,3 ms | 12 sn; parçacık önbelleği + ısıtma sonrası |
+| (h) | Beckett 2: 3 tutorial + 5 sonsuz, editöre gömülü, 120 Hz | 118,8 | %1 düşük 91,2 | — | — | `DemoReport`, kare ağırlıklı; E3'te 1006,8 ms tek takılma |
+| (h) | Final: 3 tutorial + 5 sonsuz, bağımsız pencere, 144 Hz | 129,0 | %1 düşük 32,0 (E3) | — | — | 5/8 seviyede %1 düşük ≥ 110; Unity Editor açıkken |
 
 ## Açık sorunlar / notlar
-- Seviye geçişinde (yeni seviye kurulurken) tek karelik takılma ölçüldü (FPS 60'a). Dekorasyon üretimi ve sahne kurulumu. Geçiş zaten bekleme süresinde.
-- (a) `get_performance_monitors` → `process_time` max 0,75 sn, ort 0,14 sn. FPS ort 104 ile çelişiyor; büyük olasılıkla Beckett örneklemesi/ekran görüntüsü sırasında ana iş parçacığı bekliyor. (d)'de daha kalabalık sahnede yeniden ölçülecek.
+- Seviye geçişinde (yeni seviye kurulurken) tek karelik takılma var: (h) final koşuda 20–47 ms. Sebep dekorasyon üretimi ve sahne kurulumu. Geçiş zaten bekleme süresine denk geliyor.
+- (a) `get_performance_monitors` → `process_time` max 0,75 sn, ort 0,14 sn; bu, FPS ort 104 ile çelişiyordu. Beckett örneklemesi ve ekran görüntüsü sırasında ana iş parçacığı bekliyor. (h)'de FPS oyun içi `DemoReport` ile Beckett'ten bağımsız ölçüldü.
 - Beckett MCP koparsa Claude Code'da `/mcp` ile yeniden bağlanmak gerekiyor; o sürede doğrulama CLI ile yapılıyor (bkz. CLAUDE.md).
 - Beckett `validate_script`, geçici kopyada sınıf adını `__BeckettValidate` yapıyor. Bu yüzden `self`'i tipli parametreye geçiren kod doğrulamadan geçmiyor. Tasarım buna göre: Level, `player.input_source` ve `input.bind(player)` bağlamasını dışarıdan yapıyor.
 - Beckett'in `update_file` çağrısı editörün henüz bilmediği bir dizindeki dosyayı kaydetmiyor. Tam tarama için Godot penceresinin odak alması gerekiyor (`osascript -e 'tell application "Godot" to activate'`). Bu yüzden plandaki tüm dizinler baştan oluşturuldu.
