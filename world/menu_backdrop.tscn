@@ -1,0 +1,36 @@
+[gd_scene format=3]
+
+[ext_resource type="PackedScene" path="res://world/space_backdrop.tscn" id="1_backdrop"]
+[ext_resource type="PackedScene" path="res://world/planet.tscn" id="2_planet"]
+[ext_resource type="Resource" path="res://world/styles/grass.tres" id="3_grass"]
+[ext_resource type="Resource" path="res://world/styles/moon.tres" id="4_moon"]
+[ext_resource type="PackedScene" path="res://world/stardust.tscn" id="5_stardust"]
+
+[node name="MenuBackdrop" type="Node3D"]
+
+[node name="SpaceBackdrop" parent="." instance=ExtResource("1_backdrop")]
+
+[node name="HomePlanet" parent="." instance=ExtResource("2_planet")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, -3, 0)
+radius = 6.0
+style = ExtResource("3_grass")
+spin_axis = Vector3(0.2, 1, 0.1)
+spin_speed_deg = 6.0
+
+[node name="Stardust1" parent="HomePlanet" instance=ExtResource("5_stardust")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.4, 0.8, 0.5)
+
+[node name="Stardust2" parent="HomePlanet" instance=ExtResource("5_stardust")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.6, 0.5, 0.6)
+
+[node name="FarMoon" parent="." instance=ExtResource("2_planet")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -12, 6, -18)
+radius = 3.0
+style = ExtResource("4_moon")
+spin_speed_deg = 10.0
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 16)
+current = true
+fov = 60.0
+far = 600.0

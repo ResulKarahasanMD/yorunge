@@ -2,16 +2,21 @@ class_name FrameCapture
 extends Node
 ## Command-line screenshot helper for measurements without the editor:
 ##   Godot --path . <scene.tscn> -- --capture=/abs/out.png [--capture-frame=90]
-## Renders N frames, saves the root viewport as PNG and quits (exit 0 on success).
+##   Godot --path . <scene.tscn> -- --capture=/abs/shot_{frame}.png --capture-frame=120,300,2280
+## Saves the root viewport at each listed frame (`{frame}` is replaced by the
+## frame number) and quits after the last one (exit 0 on success).
 ## GameState adds it only when --capture= is present.
 
 const LOG_TAG := "Capture"
 const PATH_PREFIX := "--capture="
 const FRAME_PREFIX := "--capture-frame="
-const DEFAULT_FRAMES := 90
+const FRAME_TOKEN := "{frame}"
+const DEFAULT_FRAME := 90
 
 var _path: String = ""
-var _frames_left: int = DEFAULT_FRAMES
+var _frames: PackedInt32Array = PackedInt32Array([DEFAULT_FRAME])
+var _frame: int = 0
+var _failed: bool = false
 
 
 static func requested_path() -> String:
@@ -29,17 +34,24 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_path = requested_path()
 	var frames := _arg_value(FRAME_PREFIX)
-	if frames.is_valid_int():
-		_frames_left = frames.to_int()
+	if not frames.is_empty():
+		_frames = PackedInt32Array()
+		for part: String in frames.split(","):
+			_frames.append(part.to_int())
+		_frames.sort()
 
 
 func _process(_delta: float) -> void:
-	_frames_left -= 1
-	if _frames_left > 0:
+	_frame += 1
+	if _frames.is_empty() or _frame != _frames[0]:
 		return
-	set_process(false)
+	var requested := _frames[0]
+	_frames.remove_at(0)
 	await RenderingServer.frame_post_draw
 	var image := get_viewport().get_texture().get_image()
-	var error := image.save_png(_path)
-	GameLog.info(LOG_TAG, "saved %s (%dx%d) error=%d" % [_path, image.get_width(), image.get_height(), error])
-	get_tree().quit(0 if error == OK else 1)
+	var target := _path.replace(FRAME_TOKEN, str(requested))
+	var error := image.save_png(target)
+	_failed = _failed or error != OK
+	GameLog.info(LOG_TAG, "saved %s (%dx%d) error=%d" % [target, image.get_width(), image.get_height(), error])
+	if _frames.is_empty():
+		get_tree().quit(1 if _failed else 0)

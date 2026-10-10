@@ -8,8 +8,8 @@
 | (c) Toz, portal, seviye akışı, düşman, hasar | `mc` | ✅ | 2026-10-10 |
 | (d) Shader ve görsel cila | `md` | ✅ | 2026-10-10 |
 | (e) Ses + juice | `me` | ✅ | 2026-10-10 |
-| (f) Menüler + kayıt | `mf` | ⏳ sürüyor | |
-| (g) Prosedürel mod | `mg` | ⬜ | |
+| (f) Menüler + kayıt | `mf` | ✅ | 2026-10-10 |
+| (g) Prosedürel mod | `mg` | ⏳ sürüyor | |
 | (h) Uçtan uca DemoBot testi | `mh` | ⬜ | |
 
 ## (0) Kurulum — 2026-10-10
@@ -251,6 +251,42 @@ Beckett MCP oturumu bu revizyon sırasında koptu (Godot 8770'te dinliyor, Claud
 - **Headless demo:** 3 tutorial süreleri aynı (hit-stop yalnız hasar ve ezmede; demoda ikisi de olmadı). Hata ve uyarı 0. **Testler 1680 kontrol, 0 hata.**
 - **Ses kalitesini ben duyamıyorum:** senin dinlemen gerekiyor.
 
+## (f) Menüler + kayıt — 2026-10-10
+### Kod
+- `autoload/SaveManager` (`SaveSystem.current`):
+  - `user://save.cfg`, sürüm 1, [settings] + [progress]. En iyi süreler 0,01 sn hassasiyetle saklanıp karşılaştırılıyor.
+  - Okunamayan ya da yanlış sürüm dosya `.bak` olarak yedekleniyor, varsayılana dönülüyor.
+  - Demo modu ayrı profil (`user://demo_save.cfg`); `--fresh-save` demo profilini varsayılana çeker.
+  - Ses ve tam ekran ayarları anında uygulanıyor. Tam ekran yalnız editöre gömülü değilken ve headless değilken; kamera hassasiyeti ve Y tersleme `settings_changed` ile canlı güncelleniyor.
+- `ui/UiTheme` (kodla tema: lacivert paneller, yuvarlak düğmeler, altın odak çerçevesi) ve `ui/UiBuilder` (düğmelere tık ve odak sesi).
+- Ekranlar:
+  - `MainMenu` ("YÖRÜNGE", Başla/Devam et, Seviyeler, Sonsuz Mod (g'de görünür), Ayarlar, Çıkış).
+  - `LevelSelect`: kilitli/açık seviyeler ve en iyi süreler. Başlıklar sahnenin `level_title`'ından `SceneState` ile okunuyor; tek kaynak.
+  - `SettingsPanel`, `PauseMenu` (karartma), `LevelCompleteScreen` (süre, rekor/en iyi, kalp, ezilen düşman, toz). `UiText`'e menü metinleri ve Türkçe virgüllü süre biçimi eklendi.
+- `GameMain` ekran akışı: MAIN_MENU / LEVEL_SELECT / SETTINGS / PLAYING / PAUSED / LEVEL_COMPLETE.
+  - Menüde arkada `world/menu_backdrop.tscn` (dönen gezegen).
+  - Esc/Start duraklatır, menülerde geri götürür (`_input`).
+  - Fare yalnız insan oyuncu oynarken yakalanıyor. `Level.set_player_control` menüdeyken girdiyi kapatıyor.
+  - Duraklatma süreye eklenmiyor (`elapsed` `_process`'te).
+- `ai/MenuAutopilot`: düğme `pressed` sinyalleriyle Ana menü → Seviyeler → 1. seviye → her sonda Sonraki/Bitir. T2'de bir kez: duraklat → Ayarlar → hassasiyet 1,35 → Geri → Devam. `--menu-delay=` ile yavaşlatılabiliyor.
+- `FrameCapture` birden çok kare yakalayabiliyor (`--capture=…{frame}.png --capture-frame=a,b,c`).
+
+### Doğrulama
+- **Headless menülü demo** (`--demo --demo-exit-on-finish --fresh-save`):
+  - Ekran sırası: MAIN_MENU → LEVEL_SELECT → PLAYING → LEVEL_COMPLETE → PLAYING (T2) → PAUSED → SETTINGS → PAUSED → PLAYING → LEVEL_COMPLETE → PLAYING (T3) → LEVEL_COMPLETE → "Bitir" → quit.
+  - Hata/uyarı 0. T2 süresi duraklatmaya rağmen 16,47 sn (duraklatma sayılmıyor).
+- **Kayıt** (`read_file user://demo_save.cfg`): `best_times` = {20,22; 16,47; 43,15}, `unlocked_tutorials=4`, `sensitivity=1.35`. **İkinci açılış:** `[Save] loaded user://demo_save.cfg (sensitivity=1.35, unlocked=4)` → kalıcı.
+- **Beckett ve CLI görüntüleri:** ana menü, seviye sonu, duraklatma, ayarlar. Türkçe karakterler doğru, odak çerçevesi görünüyor. Bulunan ve düzeltilen kusurlar:
+
+| Kusur | Sebep | Düzeltme |
+|---|---|---|
+| Menü sol üst köşede | `set_anchors_preset` ofsetleri koruyup boyutu 0×0 bırakıyor | `set_anchors_and_offsets_preset` |
+| Aynı süre "Yeni rekor!" | Yuvarlanmış kayıt (20,22) ile yuvarlanmamış koşu (20,2166) karşılaştırılıyordu | Saklanan hassasiyette karşılaştırma + test |
+| İpucu paneli seviye sonu panelinin altından taşıyor | HUD görünür kalıyordu | HUD yalnız oyun ve duraklatmada görünür |
+
+- **Süreç sorunu:** `main.tscn` editörde açıktı; dışarıdan yazdığım sürüm editör tarafından ezildi (ekranlar kayboldu). Ekran düğümleri Beckett `batch_execute` (create_node + attach_script + save_scene) ile editör içinden eklendi. Kural `CLAUDE.md`'ye yazıldı.
+- **Testler:** **1703 kontrol, 0 hata**. `test_save` 23 kontrol: varsayılanlar, ayar gidiş-dönüşü, hassasiyet sınırı, en iyi süre / aynı süre / kilit / sonsuz derinlik, bozuk ve eski sürüm → `.bak` + varsayılan. Test yalnız kendi `user://test_save.cfg` dosyalarını oluşturup siliyor.
+
 ## Çalışma modu (2026-10-10, kullanıcı)
 b→h tek oturumda, onay beklemeden. Her milestone'da şu adımlar:
 1. Testler.
@@ -281,6 +317,10 @@ _(kullanıcı sonradan değiştirebilir; her biri gerekçesiyle)_
 - **Pad:** A minör çevresinde (A2 E3 A3 C4), 6 sn döngü, −12 dB müzik.
 - **Hit-stop yalnız hasar (90 ms) ve ezmede (60 ms)**, hız 0,05. Toplama, iniş ve portal yalnız sarsıntı ve ses alıyor (akışı bozmasın).
 - **Parçacıklar `StandardMaterial3D` (billboard)** kullanıyor; toon shader'ın parçacığa katkısı yok, asset de yok.
+- **"Başla/Devam et" açık olan en ileri tutorial'ı başlatıyor;** belirli bir seviye için "Seviyeler" ekranı var.
+- **Demo modu ayrı kayıt profili kullanıyor** (`user://demo_save.cfg`). DemoBot senin ilerlemene dokunmuyor.
+- **Varsayılan ses:** ana 0,8, müzik 0,6, efektler 0,8. Hassasiyet 0,25–3,0 (varsayılan 1,0).
+- **Menü arayüzü kodla kuruluyor** (`UiBuilder`); sahnelerde yalnız kök Control + script var. Gerekçe: beş ekranı okunabilir tek bir listede tutmak.
 
 ## Ölçümler
 | Milestone | Sahne | FPS ort | FPS min | draw call ort | physics_process ort | Not |

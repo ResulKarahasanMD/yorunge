@@ -11,6 +11,8 @@ const CMDLINE_FLAG := "--demo"
 const EXIT_ON_FINISH_FLAG := "--demo-exit-on-finish"
 
 static var forced: bool = false
+## Menu autopilot delay override (> 0), set by slow demo entries for screenshots.
+static var menu_delay: float = 0.0
 
 
 static func is_active() -> bool:

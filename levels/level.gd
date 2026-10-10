@@ -74,6 +74,14 @@ func _process(delta: float) -> void:
 		elapsed += delta
 
 
+## GameMain hands control to the player only while the level is on screen
+## and unpaused (menus must not recapture the mouse or move the explorer).
+func set_player_control(enabled: bool) -> void:
+	if input_source is HumanInput:
+		input_source.set_process_unhandled_input(enabled)
+		input_source.set_physics_process(enabled)
+
+
 func is_finished() -> bool:
 	return _finished
 

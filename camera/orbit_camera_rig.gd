@@ -134,6 +134,9 @@ func _ready() -> void:
 	_query.shape = probe
 	_query.collision_mask = PhysicsLayers.WORLD
 	_shake_noise.frequency = 1.0
+	if SaveSystem.current != null:
+		SaveSystem.current.settings_changed.connect(_apply_user_settings)
+		_apply_user_settings()
 	if target != null:
 		set_target(target)
 
@@ -158,6 +161,12 @@ func snap_to_target() -> void:
 	_boom_ceiling_deg = _target_ceiling_deg()
 	view_distance = INF
 	_place_camera(target.global_transform, 0.0)
+
+
+## Sensitivity and invert-Y from the saved settings (live updates).
+func _apply_user_settings() -> void:
+	sensitivity_scale = float(SaveSystem.current.get_setting("sensitivity"))
+	invert_y = bool(SaveSystem.current.get_setting("invert_y"))
 
 
 ## Adds camera shake (impacts, damage). Saturates at 1.

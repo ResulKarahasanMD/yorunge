@@ -12,8 +12,9 @@ func _ready() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	# Temporary until the pause menu (milestone f): pause releases the mouse,
-	# any click recaptures it.
+	# In GameMain the pause menu owns Esc and the mouse; this fallback only
+	# matters for dev scenes played on their own: Esc frees the mouse, a click
+	# takes it back.
 	if event.is_action_pressed(InputBindings.PAUSE):
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	elif event is InputEventMouseButton and (event as InputEventMouseButton).pressed:
