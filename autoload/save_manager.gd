@@ -1,7 +1,9 @@
 class_name SaveSystem
 extends Node
 ## Autoloaded as `SaveManager` (typed access: `SaveSystem.current`).
-## Settings and progress in one versioned ConfigFile. A missing file means
+## Settings and progress in one versioned ConfigFile. Setting changes apply
+## at once and reach the disk debounced; progress is written immediately.
+## A missing file means
 ## defaults; an unreadable or wrong-version file is moved to `.bak` and
 ## replaced by defaults, so a bad save never blocks the game. The DemoBot
 ## uses its own profile so self-tests never touch the player's progress.
@@ -32,11 +34,19 @@ const DEFAULT_SETTINGS := {
 }
 const MIN_SENSITIVITY := 0.25
 const MAX_SENSITIVITY := 3.0
+const VOLUME_KEYS: Array[String] = ["master_volume", "music_volume", "sfx_volume"]
+## Setting changes reach the disk this long after the last one (a slider drag
+## sends one per step); leaving the settings screen or quitting writes at once.
+const SETTINGS_SAVE_DELAY := 0.5
+const NO_PENDING_SAVE := -1.0
 
 static var current: SaveSystem = null
 
 var path: String = PLAYER_PATH
+## Verification counter: times the window mode was (re)applied.
+var window_mode_requests: int = 0
 var _config: ConfigFile = ConfigFile.new()
+var _save_countdown: float = NO_PENDING_SAVE
 
 
 func _ready() -> void:
@@ -79,7 +89,20 @@ func load_from_disk() -> void:
 	_apply_settings()
 
 
+func _process(delta: float) -> void:
+	if not has_pending_save():
+		return
+	_save_countdown -= delta
+	if _save_countdown <= 0.0:
+		save_to_disk()
+
+
+func _exit_tree() -> void:
+	flush_settings()
+
+
 func save_to_disk() -> Error:
+	_save_countdown = NO_PENDING_SAVE
 	_config.set_value(META, "version", SAVE_VERSION)
 	var error := _config.save(path)
 	if error != OK:
@@ -93,23 +116,52 @@ func get_setting(key: String) -> Variant:
 	return _config.get_value(SETTINGS, key, DEFAULT_SETTINGS[key])
 
 
+## Applies the one setting that changed and schedules a debounced disk write.
 func set_setting(key: String, value: Variant) -> void:
 	if key == "sensitivity":
 		value = clampf(float(value), MIN_SENSITIVITY, MAX_SENSITIVITY)
 	_config.set_value(SETTINGS, key, value)
-	_apply_settings()
-	save_to_disk()
+	if key == "fullscreen":
+		_apply_window_mode()
+	elif VOLUME_KEYS.has(key):
+		_apply_volumes()
+	_save_countdown = SETTINGS_SAVE_DELAY
 	settings_changed.emit()
 
 
+func has_pending_save() -> bool:
+	return _save_countdown != NO_PENDING_SAVE
+
+
+## Writes a pending settings change now (settings screen closed, quitting).
+func flush_settings() -> void:
+	if has_pending_save():
+		save_to_disk()
+
+
 func _apply_settings() -> void:
+	_apply_volumes()
+	_apply_window_mode()
+
+
+func _apply_volumes() -> void:
 	if AudioSystem.current != null:
 		AudioSystem.current.set_bus_volume(&"Master", float(get_setting("master_volume")))
 		AudioSystem.current.set_bus_volume(&"Music", float(get_setting("music_volume")))
 		AudioSystem.current.set_bus_volume(&"SFX", float(get_setting("sfx_volume")))
-	if _window_mode_controllable():
-		var fullscreen := bool(get_setting("fullscreen"))
-		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN if fullscreen else DisplayServer.WINDOW_MODE_WINDOWED)
+
+
+## Switches only between fullscreen and not: a maximised (or user-resized)
+## window is left alone unless it has to leave fullscreen.
+func _apply_window_mode() -> void:
+	window_mode_requests += 1
+	if not _window_mode_controllable():
+		return
+	var mode := DisplayServer.window_get_mode()
+	var is_fullscreen := mode == DisplayServer.WINDOW_MODE_FULLSCREEN or mode == DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN
+	var want_fullscreen := bool(get_setting("fullscreen"))
+	if want_fullscreen != is_fullscreen:
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN if want_fullscreen else DisplayServer.WINDOW_MODE_WINDOWED)
 
 
 func _window_mode_controllable() -> bool:

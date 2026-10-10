@@ -10,6 +10,7 @@ const SHORT_DELAY := 0.2
 ## Real time spent paused or waiting: comfortably past SHORT_DELAY.
 const WAIT := 0.6
 const ENDLESS_SEED := 2026
+const TEST_SENSITIVITY := 1.75
 const SETTLE_FRAMES := 2
 
 var _player_save: SaveSystem = null
@@ -102,6 +103,56 @@ func test_endless_summary_is_not_a_record() -> void:
 	check(main.level_complete.best_line() == UiText.DEPTH_LINE % [1, 1], "summary shows the depth (\"%s\")" % main.level_complete.best_line())
 
 
+## The real save path end to end: a change made on the settings screen is on
+## disk once the screen closes, survives a reload of the profile and reaches
+## the camera of the next level.
+func test_settings_change_survives_a_reload() -> void:
+	var main := _start()
+	main.open_settings()
+	await _frames(SETTLE_FRAMES)
+	main.settings_panel.sensitivity_slider.value = TEST_SENSITIVITY
+	tree.root.push_input(_key(KEY_ESCAPE))
+	check(main.screen == GameMain.Screen.MAIN_MENU, "Esc closes the settings")
+	check(not _save.has_pending_save(), "closing the settings writes the change")
+	var reloaded := SaveSystem.new()
+	reloaded.use_path(TEST_SAVE)
+	check_near(float(reloaded.get_setting("sensitivity")), TEST_SENSITIVITY, "sensitivity survives a reload")
+	reloaded.free()
+	main.start_tutorial(0)
+	await _frames(SETTLE_FRAMES)
+	check_near(main.level.camera_rig.sensitivity_scale, TEST_SENSITIVITY, "the next level's camera uses it")
+
+
+## Gamepad: B goes back like Esc on every menu, A presses the focused button.
+func test_gamepad_back_and_confirm() -> void:
+	check(_joy(JOY_BUTTON_B).is_action_pressed(InputBindings.MENU_BACK), "gamepad B is a menu back button")
+	check(_joy(JOY_BUTTON_A).is_action_pressed(&"ui_accept"), "gamepad A confirms menu buttons")
+	var main := _start()
+	await _frames(SETTLE_FRAMES)
+	main.main_menu.levels_button.grab_focus()
+	tree.root.push_input(_joy(JOY_BUTTON_A))
+	tree.root.push_input(_joy(JOY_BUTTON_A, false))
+	check(main.screen == GameMain.Screen.LEVEL_SELECT, "A on Levels opens the level list (screen %s)" % _screen(main))
+	tree.root.push_input(_joy(JOY_BUTTON_B))
+	check(main.screen == GameMain.Screen.MAIN_MENU, "B leaves the level list (screen %s)" % _screen(main))
+	main.open_settings()
+	tree.root.push_input(_joy(JOY_BUTTON_B))
+	check(main.screen == GameMain.Screen.MAIN_MENU, "B leaves the settings (screen %s)" % _screen(main))
+	main.show_endless_setup()
+	tree.root.push_input(_joy(JOY_BUTTON_B))
+	check(main.screen == GameMain.Screen.MAIN_MENU, "B leaves the endless setup (screen %s)" % _screen(main))
+	main.start_tutorial(0)
+	await _frames(SETTLE_FRAMES)
+	tree.root.push_input(_joy(JOY_BUTTON_B))
+	check(main.screen == GameMain.Screen.PLAYING, "B does not pause a level (screen %s)" % _screen(main))
+	main.pause()
+	main.open_settings()
+	tree.root.push_input(_joy(JOY_BUTTON_B))
+	check(main.screen == GameMain.Screen.PAUSED, "B from the settings returns to the pause menu (screen %s)" % _screen(main))
+	tree.root.push_input(_joy(JOY_BUTTON_B))
+	check(main.screen == GameMain.Screen.PLAYING, "B on the pause menu resumes (screen %s)" % _screen(main))
+
+
 # --- Helpers ---------------------------------------------------------------------
 
 func _finish(level: Level) -> void:
@@ -126,6 +177,13 @@ static func _key(keycode: Key, unicode: int = 0) -> InputEventKey:
 	event.physical_keycode = keycode
 	event.unicode = unicode
 	event.pressed = true
+	return event
+
+
+static func _joy(button: JoyButton, pressed: bool = true) -> InputEventJoypadButton:
+	var event := InputEventJoypadButton.new()
+	event.button_index = button
+	event.pressed = pressed
 	return event
 
 

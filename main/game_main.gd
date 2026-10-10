@@ -111,6 +111,7 @@ func open_settings() -> void:
 
 
 func close_settings() -> void:
+	SaveSystem.current.flush_settings()
 	if _settings_return == Screen.PAUSED:
 		_set_screen(Screen.PAUSED, pause_menu)
 	else:
@@ -257,6 +258,7 @@ func quit_game() -> void:
 	GameLog.info(LOG_TAG, "quit")
 	if report != null:
 		report.detach()
+	SaveSystem.current.flush_settings()
 	if AudioSystem.current != null:
 		AudioSystem.current.stop_all()
 	for i in QUIT_SETTLE_FRAMES:

@@ -4,6 +4,8 @@ extends TestSuite
 
 const TEST_PATH := "user://test_save.cfg"
 const GARBAGE := "this is not a config file [[["
+## One slider drag across its range (0.05 steps).
+const SLIDER_STEPS := 20
 
 
 func _fresh() -> SaveSystem:
@@ -34,6 +36,7 @@ func test_settings_round_trip() -> void:
 	save.set_setting("invert_y", true)
 	save.set_setting("music_volume", 0.25)
 	save.set_setting("sensitivity", 1.5)
+	save.flush_settings()
 	var reloaded := SaveSystem.new()
 	reloaded.use_path(TEST_PATH)
 	check_near(float(reloaded.get_setting("sensitivity")), 1.5, "sensitivity survives a reload")
@@ -61,6 +64,35 @@ func test_progress_and_best_times() -> void:
 	reloaded.use_path(TEST_PATH)
 	check_near(reloaded.best_time("tutorial_01"), 15.0, "best time survives a reload")
 	check(reloaded.unlocked_tutorials() == 2 and reloaded.endless_best_depth() == 7, "progress survives a reload")
+	save.free()
+	reloaded.free()
+
+
+## A slider drag sends a change per step: no disk write per step (debounced
+## until the drag settles or the screen closes), and only the fullscreen
+## switch touches the window mode (re-applying it un-maximised the window).
+func test_slider_drag_neither_writes_each_step_nor_resets_the_window() -> void:
+	var save := _fresh()
+	var window_before := save.window_mode_requests
+	_remove(TEST_PATH)
+	for i in SLIDER_STEPS + 1:
+		save.set_setting("master_volume", float(i) / SLIDER_STEPS)
+	check(not FileAccess.file_exists(TEST_PATH), "no disk write while the slider moves")
+	check(save.window_mode_requests == window_before, "volume changes leave the window mode alone (%d re-applies)" % [
+		save.window_mode_requests - window_before])
+	save.set_setting("fullscreen", false)
+	check(save.window_mode_requests == window_before + 1, "the fullscreen switch applies the window mode once")
+	save._process(SaveSystem.SETTINGS_SAVE_DELAY * 0.5)
+	check(not FileAccess.file_exists(TEST_PATH), "still waiting half a delay after the last change")
+	save._process(SaveSystem.SETTINGS_SAVE_DELAY)
+	check(FileAccess.file_exists(TEST_PATH) and not save.has_pending_save(), "one write once the changes settle")
+	var reloaded := SaveSystem.new()
+	reloaded.use_path(TEST_PATH)
+	check_near(float(reloaded.get_setting("master_volume")), 1.0, "the last slider value is the one saved")
+	save.set_setting("music_volume", 0.3)
+	save.flush_settings()
+	reloaded.use_path(TEST_PATH)
+	check_near(float(reloaded.get_setting("music_volume")), 0.3, "flush writes a pending change at once")
 	save.free()
 	reloaded.free()
 

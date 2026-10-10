@@ -1,7 +1,8 @@
 class_name SettingsPanel
 extends Control
-## Volume, camera sensitivity, invert-Y and fullscreen. Every change is applied
-## and saved immediately through SaveSystem.
+## Volume, camera sensitivity, invert-Y and fullscreen. Every change applies at
+## once through SaveSystem, which writes it to disk debounced (and when the
+## screen closes).
 
 signal back_requested
 
