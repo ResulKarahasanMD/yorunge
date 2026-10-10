@@ -17,6 +17,8 @@ const TUTORIAL_LEVELS: Array[String] = [
 
 var mode: Mode = Mode.TUTORIAL
 var tutorial_index: int = 0
+var endless_base_seed: int = 0
+var endless_depth: int = 0
 var history: Array[LevelStats] = []
 
 
@@ -33,16 +35,32 @@ func start_tutorial(index: int) -> void:
 	tutorial_index = clampi(index, 0, TUTORIAL_LEVELS.size() - 1)
 
 
+func start_endless(base_seed: int) -> void:
+	mode = Mode.ENDLESS
+	endless_base_seed = base_seed
+	endless_depth = 1
+
+
 func current_level_path() -> String:
 	return TUTORIAL_LEVELS[tutorial_index]
 
 
+## The generated level for the current endless depth.
+func current_endless_spec() -> LevelSpec:
+	return LevelGenerator.generate(LevelGenerator.level_seed(endless_base_seed, endless_depth), endless_depth)
+
+
 func has_next_level() -> bool:
-	return mode == Mode.TUTORIAL and tutorial_index + 1 < TUTORIAL_LEVELS.size()
+	if mode == Mode.ENDLESS:
+		return true
+	return tutorial_index + 1 < TUTORIAL_LEVELS.size()
 
 
 func advance() -> void:
-	tutorial_index += 1
+	if mode == Mode.ENDLESS:
+		endless_depth += 1
+	else:
+		tutorial_index += 1
 
 
 func record(stats: LevelStats) -> void:

@@ -15,6 +15,8 @@ enum Phase { IDLE, WALK, LAUNCH, AIRBORNE }
 
 const LOG_TAG := "DemoBot"
 const MIN_LENGTH_SQ := 0.000001
+## Smallest improvement that counts as progress for stuck detection.
+const STUCK_PROGRESS := 0.3
 
 @export var behavior: Behavior = Behavior.SEEK
 @export var log_interval: float = 1.0
@@ -36,6 +38,13 @@ const MIN_LENGTH_SQ := 0.000001
 @export var heat_hop_threshold: float = 0.4
 ## Launch angle allowed when leaving burning ground (no slow approach there).
 @export var hot_launch_angle_deg: float = 8.0
+## Walk at least this much faster than a spinning surface moves under us.
+@export var surface_speed_margin: float = 1.0
+## When the launch angle stops improving, take a sloppy launch within this angle.
+@export var stuck_launch_angle_deg: float = 20.0
+## No heat hops while the local up points within this angle of a planet in
+## jump reach: such a hop would fling the player back across the gap.
+@export var hot_hop_cone_deg: float = 40.0
 @export var jump_hold_time: float = 0.6
 @export var stuck_jump_time: float = 2.0
 @export var stuck_skip_time: float = 7.0
@@ -67,6 +76,8 @@ var _skipped: Array[Node3D] = []
 var _best_distance: float = INF
 var _stuck_timer: float = 0.0
 var _stomp_target: Node3D = null
+## What the stuck timer is measuring (goal walk vs a specific launch).
+var _progress_key: String = ""
 
 
 func bind(target: PlayerController) -> void:
@@ -147,7 +158,7 @@ func _seek(delta: float) -> void:
 		hop_target = null
 		_walk_to_goal(delta)
 	else:
-		_walk_to_launch(here, goal_planet)
+		_walk_to_launch(here, goal_planet, delta)
 
 
 func _pick_goal() -> void:
@@ -207,22 +218,31 @@ func _walk_to_goal(delta: float) -> void:
 	if flat.length() < pickup_jump_distance and to_goal.dot(up) > pickup_jump_altitude:
 		_press_jump()
 	_avoid_hazards(up)
-	_update_stuck(delta, to_goal.length())
+	_update_stuck(delta, to_goal.length(), "goal:%s" % goal.name)
 
 
-func _walk_to_launch(here: Planet, goal_planet: Planet) -> void:
+func _walk_to_launch(here: Planet, goal_planet: Planet, delta: float) -> void:
 	var path := level.planet_path(here, goal_planet)
 	hop_target = path[1] if path.size() > 1 else goal_planet
 	var up := player.current_up
 	var hop_dir := (hop_target.global_position - here.global_position).normalized()
 	var angle := rad_to_deg(up.angle_to(hop_dir))
 	var flat := VectorMath.flatten(hop_dir, up)
-	var scale := clampf(angle / launch_slowdown_deg, 0.15, 1.0)
+	# On a spinning moon the launch point slides away under us: never walk
+	# slower than the surface moves, or we settle a few degrees short forever.
+	var surface_speed := VectorMath.flatten(player.get_platform_velocity(), up).length()
+	var min_scale := clampf((surface_speed + surface_speed_margin) / player.move_speed, 0.15, 1.0)
+	var scale := clampf(angle / launch_slowdown_deg, min_scale, 1.0)
 	_wish = flat.normalized() * scale if flat.length_squared() > MIN_LENGTH_SQ else Vector3.ZERO
 	state = &"to_launch"
+	var relative_speed := VectorMath.flatten(player.velocity - player.get_platform_velocity(), up).length()
 	var burning := player.heat > 0.0
 	var ready_to_launch := angle <= hot_launch_angle_deg if burning else (
-		angle <= launch_angle_deg and player.tangential_velocity().length() <= launch_max_speed)
+		angle <= launch_angle_deg and relative_speed <= launch_max_speed)
+	_update_stuck(delta, angle, "launch:%s" % hop_target.name)
+	if not ready_to_launch and _stuck_timer >= stuck_jump_time and angle <= stuck_launch_angle_deg:
+		ready_to_launch = true
+		GameLog.info(LOG_TAG, "launch angle stuck at %.1f deg, launching anyway" % angle)
 	if ready_to_launch:
 		hops += 1
 		_launch_from = here
@@ -282,8 +302,14 @@ func _skip_goal(reason: String) -> void:
 	goal = null
 
 
-func _update_stuck(delta: float, distance: float) -> void:
-	if distance < _best_distance - 0.3:
+## `distance` is any progress measure that should shrink (metres to a goal,
+## degrees to a launch point).
+func _update_stuck(delta: float, distance: float, key: String) -> void:
+	if key != _progress_key:
+		_progress_key = key
+		_best_distance = INF
+		_stuck_timer = 0.0
+	if distance < _best_distance - STUCK_PROGRESS:
 		_best_distance = distance
 		_stuck_timer = 0.0
 		return
@@ -295,7 +321,7 @@ func _update_stuck(delta: float, distance: float) -> void:
 
 
 func _avoid_hazards(up: Vector3) -> void:
-	if player.heat > heat_hop_threshold:
+	if player.heat > heat_hop_threshold and not _hop_would_cross(up):
 		_press_jump()
 		return
 	var enemy := _enemy_ahead(up, _wish)
@@ -303,6 +329,18 @@ func _avoid_hazards(up: Vector3) -> void:
 		_stomp_target = enemy
 		stomp_attempts += 1
 		_press_jump()
+
+
+## True when a straight-up hop here would carry the player to another planet.
+func _hop_would_cross(up: Vector3) -> bool:
+	for planet: Planet in level.planets():
+		if planet == player.current_planet:
+			continue
+		var to_planet := planet.global_position - player.global_position
+		var surface_distance := to_planet.length() - planet.radius
+		if surface_distance <= JumpReach.MAX_GAP and rad_to_deg(up.angle_to(to_planet)) < hot_hop_cone_deg:
+			return true
+	return false
 
 
 func _enemy_ahead(up: Vector3, direction: Vector3) -> Node3D:

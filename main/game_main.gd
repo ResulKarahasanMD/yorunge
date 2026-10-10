@@ -6,8 +6,10 @@ extends Node
 ## SaveSystem and GameState, and is the single exit path of the game.
 
 signal screen_changed(screen: Screen)
+## The tutorial sequence ended (before returning to the main menu).
+signal run_finished
 
-enum Screen { MAIN_MENU, LEVEL_SELECT, SETTINGS, PLAYING, PAUSED, LEVEL_COMPLETE }
+enum Screen { MAIN_MENU, LEVEL_SELECT, SETTINGS, PLAYING, PAUSED, LEVEL_COMPLETE, ENDLESS_SETUP }
 
 const LOG_TAG := "Main"
 const QUIT_SETTLE_FRAMES := 5
@@ -32,6 +34,7 @@ var _backdrop: Node3D = null
 @onready var settings_panel: SettingsPanel = $UI/SettingsPanel
 @onready var pause_menu: PauseMenu = $UI/PauseMenu
 @onready var level_complete: LevelCompleteScreen = $UI/LevelComplete
+@onready var endless_setup: EndlessSetup = $UI/EndlessSetup
 
 
 func _ready() -> void:
@@ -56,7 +59,7 @@ func _input(event: InputEvent) -> void:
 			resume()
 		Screen.SETTINGS:
 			close_settings()
-		Screen.LEVEL_SELECT:
+		Screen.LEVEL_SELECT, Screen.ENDLESS_SETUP:
 			show_main_menu()
 		_:
 			return
@@ -69,7 +72,7 @@ func show_main_menu() -> void:
 	get_tree().paused = false
 	_unload_level()
 	_show_backdrop()
-	main_menu.refresh(not GameState.history.is_empty() or SaveSystem.current.unlocked_tutorials() > 1, false)
+	main_menu.refresh(not GameState.history.is_empty() or SaveSystem.current.unlocked_tutorials() > 1, true)
 	_set_screen(Screen.MAIN_MENU, main_menu)
 
 
@@ -79,6 +82,11 @@ func show_level_select() -> void:
 		best_times.append(SaveSystem.current.best_time(_level_id(path)))
 	level_select.refresh(SaveSystem.current.unlocked_tutorials(), best_times)
 	_set_screen(Screen.LEVEL_SELECT, level_select)
+
+
+func show_endless_setup() -> void:
+	endless_setup.refresh(SaveSystem.current.endless_best_depth())
+	_set_screen(Screen.ENDLESS_SETUP, endless_setup)
 
 
 func open_settings() -> void:
@@ -117,28 +125,48 @@ func continue_game() -> void:
 func start_tutorial(index: int) -> void:
 	GameState.start_tutorial(index)
 	_deaths = 0
-	_load_level(GameState.current_level_path())
+	_load_current()
+
+
+func start_endless(base_seed: int) -> void:
+	GameState.start_endless(base_seed)
+	_deaths = 0
+	GameLog.info(LOG_TAG, "endless run, base seed %d" % base_seed)
+	_load_current()
 
 
 func restart_level() -> void:
 	_deaths = 0
-	_load_level(GameState.current_level_path())
+	_load_current()
 
 
 func next_level() -> void:
 	if GameState.has_next_level():
 		GameState.advance()
 		_deaths = 0
-		_load_level(GameState.current_level_path())
+		_load_current()
 	else:
 		_finish_run()
 
 
-func _load_level(path: String) -> void:
+## Tutorial scene or freshly generated endless level for the current position.
+func _load_current() -> void:
+	if GameState.mode == GameStateManager.Mode.ENDLESS:
+		var started := Time.get_ticks_usec()
+		var spec := GameState.current_endless_spec()
+		var built := LevelBuilder.build(spec)
+		GameLog.info(LOG_TAG, "generated %s: %d planets, %d enemies in %.1f ms" % [
+			spec.level_id(), spec.planets.size(), spec.enemies.size(), float(Time.get_ticks_usec() - started) / 1000.0])
+		_spawn_level(built)
+	else:
+		_spawn_level((load(GameState.current_level_path()) as PackedScene).instantiate() as Level)
+
+
+func _spawn_level(next: Level) -> void:
 	get_tree().paused = false
 	_hide_backdrop()
 	_unload_level()
-	level = (load(path) as PackedScene).instantiate() as Level
+	level = next
 	level_host.add_child(level)
 	level.completed.connect(_on_level_completed)
 	level.failed.connect(_on_level_failed)
@@ -158,8 +186,9 @@ func _unload_level() -> void:
 func _on_level_completed(stats: LevelStats) -> void:
 	stats.deaths = _deaths
 	var best_before := SaveSystem.current.best_time(stats.level_id)
-	var tutorial := GameState.tutorial_index if GameState.mode == GameStateManager.Mode.TUTORIAL else -1
-	var new_record := SaveSystem.current.record_level(stats, tutorial, 0)
+	var endless := GameState.mode == GameStateManager.Mode.ENDLESS
+	var tutorial := -1 if endless else GameState.tutorial_index
+	var new_record := SaveSystem.current.record_level(stats, tutorial, GameState.endless_depth if endless else 0)
 	GameState.record(stats)
 	var completed_level := level
 	await get_tree().create_timer(complete_screen_delay).timeout
@@ -174,17 +203,22 @@ func _on_level_failed(_stats: LevelStats) -> void:
 	var failed_level := level
 	await get_tree().create_timer(retry_delay).timeout
 	if level == failed_level and screen == Screen.PLAYING:
-		_load_level(GameState.current_level_path())
+		_load_current()
 
 
 func _finish_run() -> void:
+	GameLog.info(LOG_TAG, "tutorials finished")
+	run_finished.emit()
+	show_main_menu()
+
+
+## End of a self-test: print every recorded level, then quit if asked to.
+func finish_demo() -> void:
 	GameLog.info(LOG_TAG, "run finished: %d levels" % GameState.history.size())
 	for stats: LevelStats in GameState.history:
 		GameLog.info(LOG_TAG, "  %s" % stats.to_dict())
 	if DemoMode.should_exit_on_finish():
 		quit_game()
-	else:
-		show_main_menu()
 
 
 ## Single exit path: silence audio, let the audio server release its
@@ -205,6 +239,9 @@ func _wire_screens() -> void:
 	main_menu.levels_requested.connect(show_level_select)
 	main_menu.settings_requested.connect(open_settings)
 	main_menu.quit_requested.connect(quit_game)
+	main_menu.endless_requested.connect(show_endless_setup)
+	endless_setup.start_requested.connect(start_endless)
+	endless_setup.back_requested.connect(show_main_menu)
 	level_select.level_chosen.connect(start_tutorial)
 	level_select.back_requested.connect(show_main_menu)
 	settings_panel.back_requested.connect(close_settings)
@@ -219,7 +256,7 @@ func _wire_screens() -> void:
 
 func _set_screen(new_screen: Screen, overlay: Control) -> void:
 	screen = new_screen
-	for control: Control in [main_menu, level_select, settings_panel, pause_menu, level_complete]:
+	for control: Control in [main_menu, level_select, settings_panel, pause_menu, level_complete, endless_setup]:
 		control.visible = control == overlay
 	hud.visible = level != null and (new_screen == Screen.PLAYING or new_screen == Screen.PAUSED)
 	var playing := new_screen == Screen.PLAYING

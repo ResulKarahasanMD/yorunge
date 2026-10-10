@@ -11,6 +11,7 @@ const TITLE_SIZE := 44
 const RECORD_COLOR := Color(1.0, 0.85, 0.4)
 
 var next_button: Button
+var menu_button: Button
 
 var _time_label: Label
 var _best_label: Label
@@ -31,7 +32,7 @@ func _ready() -> void:
 	_stardust_label = UiBuilder.label(column, "")
 	next_button = UiBuilder.button(column, UiText.NEXT_LEVEL, next_requested.emit)
 	UiBuilder.button(column, UiText.PLAY_AGAIN, retry_requested.emit)
-	UiBuilder.button(column, UiText.MAIN_MENU, menu_requested.emit)
+	menu_button = UiBuilder.button(column, UiText.MAIN_MENU, menu_requested.emit)
 
 
 ## `best` is the stored best time before this run (-1 = none).

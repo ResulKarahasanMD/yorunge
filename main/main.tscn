@@ -7,6 +7,7 @@
 [ext_resource type="Script" uid="uid://ntr1lcxvwakn" path="res://ui/settings_panel.gd" id="5_grrlh"]
 [ext_resource type="Script" uid="uid://dr7y4tmpeiexf" path="res://ui/pause_menu.gd" id="6_0i4oc"]
 [ext_resource type="Script" uid="uid://cvn0723j5xye2" path="res://ui/level_complete_screen.gd" id="7_bsumw"]
+[ext_resource type="Script" uid="uid://b8udqbtrkp330" path="res://ui/endless_setup.gd" id="8_67ri8"]
 
 [node name="Main" type="Node" unique_id=187132280]
 script = ExtResource("1_main")
@@ -42,3 +43,8 @@ script = ExtResource("6_0i4oc")
 layout_mode = 3
 anchors_preset = 0
 script = ExtResource("7_bsumw")
+
+[node name="EndlessSetup" type="Control" parent="UI" unique_id=1159261419]
+layout_mode = 3
+anchors_preset = 0
+script = ExtResource("8_67ri8")

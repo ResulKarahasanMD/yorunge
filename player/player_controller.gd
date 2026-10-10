@@ -42,6 +42,9 @@ const MIN_LENGTH_SQ := 0.000001
 @export var up_sharpness_air: float = 4.0
 @export var floor_snap: float = 0.4
 @export var floor_max_angle_deg: float = 50.0
+## Below this altitude above the current planet, other planets' pull is
+## ignored (must stay under GravitySource.core_margin so the pull is full).
+@export var ground_lock_altitude: float = 1.2
 
 @export_group("Hazards")
 ## Seconds of continuous contact with a burning surface before it hurts.
@@ -143,6 +146,18 @@ func vertical_speed() -> float:
 
 func _update_gravity() -> void:
 	gravity_sample = GravityResolver.sample(get_tree(), global_position)
+	# Ground lock: standing on, or settling back onto, the current planet near
+	# its surface, only that planet pulls. Summed wells nearly cancel between
+	# two close planets, which left the player floating just above the surface
+	# with a spinning "up". Rising (a jump) keeps the summed field, so the
+	# flip toward a neighbouring planet starts at take-off and the player lands
+	# feet first even across small gaps.
+	var settling := is_on_floor() or vertical_speed() <= 0.0
+	if settling and dominant_source != null and dominant_source.enabled \
+			and dominant_source.altitude_of(global_position) < ground_lock_altitude:
+		gravity_sample.acceleration = dominant_source.acceleration_at(global_position)
+		gravity_sample.dominant = dominant_source
+		gravity_sample.dominant_weight = dominant_source.weight_at(global_position)
 	if gravity_sample.dominant != dominant_source:
 		dominant_source = gravity_sample.dominant
 		current_planet = dominant_source.get_parent() as Planet if dominant_source != null else null

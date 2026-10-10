@@ -21,6 +21,14 @@ const ENDLESS := "Sonsuz Mod"
 const SETTINGS := "Ayarlar"
 const QUIT := "Çıkış"
 
+# Endless setup
+const ENDLESS_TITLE := "Sonsuz Mod"
+const SEED_LABEL := "Seed (sayı ya da kelime)"
+const SEED_PLACEHOLDER := "örn. 2026"
+const RANDOM_SEED := "Rastgele seed"
+const BEST_DEPTH := "En derin seviye: %d"
+const ENDLESS_LEVEL_TITLE := "Sonsuz · Seviye %d  ·  #%d"
+
 # Level select
 const LEVEL_SELECT_TITLE := "Seviyeler"
 const LEVEL_LOCKED := "%s  (kilitli)"

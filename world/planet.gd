@@ -36,6 +36,8 @@ const ATMOSPHERE_SHADER := preload("res://shaders/atmosphere.gdshader")
 ## Atmosphere shell radius as a multiple of the planet radius.
 @export var atmosphere_scale: float = 1.15
 @export var decorate: bool = true
+## Non-zero overrides the name-based decoration seed (generated levels).
+@export var decoration_seed: int = 0
 
 var gravity_source: GravitySource
 var _collision: CollisionShape3D
@@ -154,4 +156,6 @@ func _apply_style() -> void:
 
 ## Stable per planet: name and size, so tutorial levels look the same every run.
 func _decoration_seed() -> int:
+	if decoration_seed != 0:
+		return decoration_seed
 	return hash([String(name), snappedf(radius, 0.01)])

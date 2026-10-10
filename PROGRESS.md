@@ -9,8 +9,8 @@
 | (d) Shader ve görsel cila | `md` | ✅ | 2026-10-10 |
 | (e) Ses + juice | `me` | ✅ | 2026-10-10 |
 | (f) Menüler + kayıt | `mf` | ✅ | 2026-10-10 |
-| (g) Prosedürel mod | `mg` | ⏳ sürüyor | |
-| (h) Uçtan uca DemoBot testi | `mh` | ⬜ | |
+| (g) Prosedürel mod | `mg` | ✅ | 2026-10-10 |
+| (h) Uçtan uca DemoBot testi | `mh` | ⏳ sürüyor | |
 
 ## (0) Kurulum — 2026-10-10
 - Git deposu açıldı, tek dal `main`.
@@ -287,6 +287,42 @@ Beckett MCP oturumu bu revizyon sırasında koptu (Godot 8770'te dinliyor, Claud
 - **Süreç sorunu:** `main.tscn` editörde açıktı; dışarıdan yazdığım sürüm editör tarafından ezildi (ekranlar kayboldu). Ekran düğümleri Beckett `batch_execute` (create_node + attach_script + save_scene) ile editör içinden eklendi. Kural `CLAUDE.md`'ye yazıldı.
 - **Testler:** **1703 kontrol, 0 hata**. `test_save` 23 kontrol: varsayılanlar, ayar gidiş-dönüşü, hassasiyet sınırı, en iyi süre / aynı süre / kilit / sonsuz derinlik, bozuk ve eski sürüm → `.bak` + varsayılan. Test yalnız kendi `user://test_save.cfg` dosyalarını oluşturup siliyor.
 
+## (g) Prosedürel mod — 2026-10-10
+### Kod
+- `levels/LevelSpec`: düğümsüz seviye tanımı. Tipli iç sınıflar `PlanetSpec`, `SurfacePoint`, `EnemySpec`; karşılaştırma için kanonik `to_text()`.
+- `levels/LevelGenerator.generate(seed, depth)` (deterministik):
+  - Gezegen sayısı 3 + derinlik/2 (+0/1), en fazla 8. Başlangıç gezegeni çimen, R 8–10.
+  - Ağaç büyümesi: %65 en yeni gezegene, kalanı eskilere dal.
+  - Bağlantı boşluğu 3,0 m ile min(3,5 + 0,35·derinlik, 7,2) arası. Herhangi iki gezegen arası ≥ 3,0 m.
+  - Tip ağırlıkları: çimen 35 / buz 25 / lav 8 + 2,5·derinlik (en fazla 30) / ay 20. Aylar R 3,5–5 ve 18–35°/sn dönüyor.
+  - 5 toz farklı gezegenlerde. Portal başlangıçtan en çok zıplama uzaklıktaki gezegende. Düşman sayısı min(derinlik − 1, 4); başlangıç gezegeninde ve R < 5 gezegende düşman yok.
+  - `validate()` tüm kuralları kontrol ediyor. Derinliğe göre seed: `level_seed(base, depth)`.
+- `levels/LevelBuilder.build(spec)`: tutorial'larla aynı sahneler. Dekorasyon seed'i spec'ten, başlık "Sonsuz · Seviye N · #seed".
+- `GameState` sonsuz modu (başlangıç seed'i, derinlik; `has_next_level` her zaman true). `GameMain.start_endless`, ortak `_load_current` / `_spawn_level`, yeniden denemede aynı spec. `SaveSystem` sonsuz modda en derin seviyeyi tutuyor.
+- `ui/EndlessSetup`: seed alanı (sayı aynen, kelime hash'lenir), Rastgele, Başla, en derin seviye. Ana menüde "Sonsuz Mod" görünür.
+- `MenuAutopilot`: `--endless-levels=N --endless-seed=S`. Tutorial'lardan sonra Sonsuz → seed → Başla → N seviye → Ana menü → `finish_demo()`.
+- `debug/endless_probe.tscn`: tek bir üretilmiş seviyeyi bota oynatıp iz basıyor (`--seed --depth --time --trace`).
+
+### Bulunan ve düzeltilen sorunlar (sonsuz mod ilk kez koşunca)
+1. **Lavda ileri geri savrulma:** bot lav gezegeninin komşuya bakan tarafında "ısı zıplaması" yapınca karşıya geri uçuyordu. Yukarı yön 40°'lik koni içinde zıplama menzilindeki bir gezegeni gösteriyorsa ısı zıplaması yok.
+2. **Dönen ayda fırlatma noktasına hiç varamama** (T3'te 600 sn takıldı): yavaşlama tabanı (~1 m/s) ay yüzeyinin hızından (~2,1 m/s) düşüktü ve 6°'de denge oluşuyordu; hız koşulu da dünyaya göre ölçülüyordu.
+   - Hız artık zemine göreli ölçülüyor ve yürüyüş yüzey hızının en az 1 m/s üstünde.
+   - Fırlatma evresine takılma algılaması eklendi (2 sn → 20° içinde özensiz fırlatma, 7 sn → hedefi atla).
+   - İlerleme ölçütü değişince takılma sayacı sıfırlanıyor. → **T3 43,15 → 20,55 sn.**
+3. **Yakın gezegenler arasında süzülme** (fizik hatası, insanı da etkiler): 2,5 m boşlukta iki çekim birbirini neredeyse götürüyordu (24 vs 23 m/s²). Oyuncu yüzeyden 0,2–0,3 m'de süzülüyor, yukarı yönü saniyede ters dönüyordu.
+   - **Zemin kilidi:** zemindeyken ya da alçalırken, mevcut gezegenin yüzeyinden 1,2 m'den alçaksa yalnız o gezegen çekiyor. Yükselirken toplanmış alan korunuyor; böylece takla kalkışta başlıyor.
+   - İlk denemede kilidi yükselirken de uyguladım; 2,5 m'de kafa çarpması çıktı. İkinci denemede kilit yalnız zeminde ve alçalırken.
+   - Ölçüm: 3,0–9,0 m iner, 2,0–2,5 m kaçar. 1,5 m boyundaki kaşif dar boşlukta takla tamamlanmadan kafayla çarpıyor.
+   - → **Tasarım kuralı: en küçük boşluk 3,0 m.** Tutorial'ların hepsi ≥ 3,5 m. Ölçülen MAX_GAP 9,0 m değişmedi.
+
+### Doğrulama
+- **`test_generator`** (500 seed, derinlik 1–10): **geçersiz 0**, gezegen 3–8, en büyük bağlantı boşluğu 6,99 m (≤ 7,2), spec başına 0,08 ms. Aynı seed → aynı spec. 50 seed → 50 farklı seviye. Derinlik 1'de düşman 0, derinlik 9'da ortalama 4,0; ortalama gezegen 3,4 → 7,6. Builder spec'le birebir (gezegen, 5 toz, uyuyan portal, düşmanlar, doğma noktası).
+- **`endless_probe`**, 6 seed × derinlik 1–6, paralel: **6/6 tamamlandı, 5/5 toz**, 12,4–39,0 sn, atlanan hedef 0. Önceden takılan seed 1573045651 / d2: 23,0 sn.
+- **Tam headless demo** (`--endless-levels=2 --endless-seed=2026`): T1 19,25 / T2 16,48 / T3 20,55 / Sonsuz 1 (#1850228613, 4 gezegen) 17,27 / Sonsuz 2 (#1573045651, 5 gezegen, 1 düşman) 23,02 sn. Hasar 0, hata ve uyarı 0, çıkış temiz. Üretim 0,3–0,5 ms.
+- **Ölçüm düzeneği** (zemin kilidi sonrası): ezme, yandan çarpma, lav ve yeniden doğma sonuçları değişmedi.
+- **Beckett** (`endless_probe`, seed 2026 derinlik 5): ekran görüntüsü tutarlı (buz + çimen gezegenleri + diken). FPS 113,8 ort; tek 0,53 sn takılma yine bir Beckett işlemine bitişik. Bağımsız ölçüm (h)'de oyun içi kare süresi raporuyla yapılacak.
+- **Testler:** **1722 kontrol, 0 hata.**
+
 ## Çalışma modu (2026-10-10, kullanıcı)
 b→h tek oturumda, onay beklemeden. Her milestone'da şu adımlar:
 1. Testler.
@@ -321,6 +357,10 @@ _(kullanıcı sonradan değiştirebilir; her biri gerekçesiyle)_
 - **Demo modu ayrı kayıt profili kullanıyor** (`user://demo_save.cfg`). DemoBot senin ilerlemene dokunmuyor.
 - **Varsayılan ses:** ana 0,8, müzik 0,6, efektler 0,8. Hassasiyet 0,25–3,0 (varsayılan 1,0).
 - **Menü arayüzü kodla kuruluyor** (`UiBuilder`); sahnelerde yalnız kök Control + script var. Gerekçe: beş ekranı okunabilir tek bir listede tutmak.
+- **Zemin kilidi 1,2 m** (zemindeyken ya da alçalırken yalnız mevcut gezegen çeker). Gerekçe: yakın gezegenler arasında süzülme. Hissi elle denemen gerekiyor.
+- **En küçük gezegen boşluğu 3,0 m** (ölçüm: 2,5 m'de kafa çarpması).
+- **Sonsuz mod tek bir başlangıç seed'inden derinlikle ilerliyor;** her derinliğin kendi türetilmiş seed'i var (HUD'da #seed). Seed alanına kelime de yazılabiliyor.
+- **Sonsuz modda zorluk:** boşluk, gezegen sayısı, lav oranı ve düşman sayısı derinlikle artıyor; derinlik 1'de düşman yok.
 
 ## Ölçümler
 | Milestone | Sahne | FPS ort | FPS min | draw call ort | physics_process ort | Not |
