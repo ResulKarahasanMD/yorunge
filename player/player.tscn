@@ -1,0 +1,102 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://player/player_controller.gd" id="1_ctrl"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_body"]
+radius = 0.4
+height = 1.5
+
+[sub_resource type="StandardMaterial3D" id="Mat_suit"]
+albedo_color = Color(0.94, 0.95, 0.98, 1)
+roughness = 0.55
+
+[sub_resource type="StandardMaterial3D" id="Mat_accent"]
+albedo_color = Color(1, 0.52, 0.16, 1)
+roughness = 0.5
+
+[sub_resource type="StandardMaterial3D" id="Mat_visor"]
+albedo_color = Color(0.08, 0.2, 0.36, 1)
+metallic = 0.4
+roughness = 0.12
+
+[sub_resource type="StandardMaterial3D" id="Mat_glow"]
+albedo_color = Color(0.55, 0.95, 1, 1)
+emission_enabled = true
+emission = Color(0.4, 0.9, 1, 1)
+emission_energy_multiplier = 2.5
+
+[sub_resource type="CapsuleMesh" id="Mesh_body"]
+material = SubResource("Mat_suit")
+radius = 0.36
+height = 0.95
+
+[sub_resource type="SphereMesh" id="Mesh_head"]
+material = SubResource("Mat_suit")
+radius = 0.34
+height = 0.66
+
+[sub_resource type="SphereMesh" id="Mesh_visor"]
+material = SubResource("Mat_visor")
+radius = 0.26
+height = 0.4
+
+[sub_resource type="BoxMesh" id="Mesh_pack"]
+material = SubResource("Mat_accent")
+size = Vector3(0.44, 0.5, 0.22)
+
+[sub_resource type="CylinderMesh" id="Mesh_antenna"]
+material = SubResource("Mat_accent")
+top_radius = 0.025
+bottom_radius = 0.025
+height = 0.34
+
+[sub_resource type="SphereMesh" id="Mesh_tip"]
+material = SubResource("Mat_glow")
+radius = 0.08
+height = 0.16
+
+[sub_resource type="CapsuleMesh" id="Mesh_foot"]
+material = SubResource("Mat_accent")
+radius = 0.12
+height = 0.38
+
+[node name="Player" type="CharacterBody3D"]
+script = ExtResource("1_ctrl")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.75, 0)
+shape = SubResource("CapsuleShape3D_body")
+
+[node name="Visual" type="Node3D" parent="."]
+
+[node name="Body" type="MeshInstance3D" parent="Visual"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.62, 0)
+mesh = SubResource("Mesh_body")
+
+[node name="Backpack" type="MeshInstance3D" parent="Visual"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.72, 0.32)
+mesh = SubResource("Mesh_pack")
+
+[node name="FootL" type="MeshInstance3D" parent="Visual"]
+transform = Transform3D(1, 0, 0, 0, 0, -1, 0, 1, 0, -0.16, 0.12, -0.06)
+mesh = SubResource("Mesh_foot")
+
+[node name="FootR" type="MeshInstance3D" parent="Visual"]
+transform = Transform3D(1, 0, 0, 0, 0, -1, 0, 1, 0, 0.16, 0.12, -0.06)
+mesh = SubResource("Mesh_foot")
+
+[node name="Head" type="MeshInstance3D" parent="Visual"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.22, 0)
+mesh = SubResource("Mesh_head")
+
+[node name="Visor" type="MeshInstance3D" parent="Visual/Head"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 0.55, 0, 0.02, -0.19)
+mesh = SubResource("Mesh_visor")
+
+[node name="Antenna" type="MeshInstance3D" parent="Visual/Head"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.12, 0.42, 0.04)
+mesh = SubResource("Mesh_antenna")
+
+[node name="AntennaTip" type="MeshInstance3D" parent="Visual/Head/Antenna"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.2, 0)
+mesh = SubResource("Mesh_tip")

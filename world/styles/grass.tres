@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="PlanetStyle" format=3]
+
+[ext_resource type="Script" path="res://world/planet_style.gd" id="1_style"]
+
+[resource]
+script = ExtResource("1_style")
+display_name = "Çimenli"
+surface = 0
+color_low = Color(0.16, 0.42, 0.22, 1)
+color_mid = Color(0.32, 0.66, 0.3, 1)
+color_high = Color(0.6, 0.84, 0.38, 1)
+color_accent = Color(1, 0.86, 0.42, 1)
+atmosphere_color = Color(0.55, 0.9, 1, 1)

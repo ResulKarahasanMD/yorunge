@@ -11,6 +11,7 @@ config_version=5
 [application]
 
 config/name="Yörünge"
+run/main_scene="res://levels/dev/sandbox_a.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
 config/icon="res://icon.svg"
 
@@ -34,6 +35,13 @@ window/stretch/aspect="expand"
 [editor_plugins]
 
 enabled=PackedStringArray("res://addons/beckett/plugin.cfg")
+
+[layer_names]
+
+3d_physics/layer_1="world"
+3d_physics/layer_2="player"
+3d_physics/layer_3="enemy"
+3d_physics/layer_4="pickup"
 
 [physics]
 
