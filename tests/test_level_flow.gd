@@ -132,3 +132,21 @@ func test_menus_take_devices_away_from_explorer_and_camera() -> void:
 	check(human.consume_jump_pressed(), "a fresh press jumps again")
 	for action: StringName in HELD_ACTIONS:
 		Input.action_release(action)
+
+
+## A hop that carries the explorer straight into the portal ends the level in
+## the air: the bot must still count it as landed (E3 showed one "missed" hop
+## in every run this way).
+func test_hop_into_the_portal_counts_as_landed() -> void:
+	var level := _build(true, null, Level.InputMode.DEMO)
+	var bot := level.input_source as DemoBot
+	var planet := level.planets()[0]
+	for goal: Node3D in level.demo_goals():
+		(goal as Stardust).collect()
+	bot.hops = 1
+	bot.hop_target = planet
+	bot._launch_from = null
+	bot._phase = DemoBot.Phase.AIRBORNE
+	level.portal._on_body_entered(level.player)
+	check(level.is_finished(), "level finished through the portal")
+	check(bot.hops_landed == 1, "the hop into the portal counts as landed (%d/%d)" % [bot.hops_landed, bot.hops])

@@ -7,8 +7,10 @@ extends PlayerInput
 ## planets it walks to the launch point facing the next planet of a PlanetGraph
 ## path, slows down, jumps straight at it and steers in the air. When every
 ## goal is a Planet (no pickups in the level) it tours them in order.
-## Hazards: hops off burning ground before it hurts, and jumps at enemies ahead,
-## steering onto them in the air to stomp.
+## Hazards: hops off burning ground before it hurts. Enemies: plans a stomp
+## from the ball's patrol (where it will be when a jump comes down on it),
+## jumps once that landing is reachable and steers onto the predicted spot in
+## the air; hops when a ball it cannot stomp is about to touch it.
 
 enum Behavior { GREAT_CIRCLE, SEEK }
 enum Phase { IDLE, WALK, LAUNCH, AIRBORNE }
@@ -33,7 +35,6 @@ const STUCK_PROGRESS := 0.3
 ## Floating goals at least this high above the feet need a jump when close.
 @export var pickup_jump_altitude: float = 1.6
 @export var pickup_jump_distance: float = 1.4
-@export var enemy_jump_distance: float = 2.4
 ## Hop off burning ground once the player's heat passes this (0..1).
 @export var heat_hop_threshold: float = 0.4
 ## Launch angle allowed when leaving burning ground (no slow approach there).
@@ -50,6 +51,28 @@ const STUCK_PROGRESS := 0.3
 @export var stuck_skip_time: float = 7.0
 @export var max_hop_failures: int = 4
 
+@export_group("Stomp")
+## Enemies further than this along the surface are ignored.
+@export var stomp_engage_distance: float = 8.0
+## The feet line up over the ball this far above its top, then come down on
+## it: contact is seen a tick or two late at falling speed, so it must be square.
+@export var stomp_align_height: float = 0.6
+## Share of the air acceleration a planned stomp may need (curvature margin).
+@export var stomp_control_margin: float = 0.6
+## No stomp jumps where a neighbour's pull bends the arc: gravity along up
+## at every probe height above the take-off point must keep this share of the
+## planet's own pull.
+@export var stomp_clean_gravity: float = 0.9
+@export var stomp_probe_heights: PackedFloat32Array = PackedFloat32Array([0.5, 1.5, 2.5])
+## The landing spot must lie within this angle of the current heading.
+@export var stomp_max_turn_deg: float = 50.0
+## Steering never divides by less time than this (the needed speed blows up).
+@export var stomp_min_steer_time: float = 0.12
+## A ball that will come this close (centre to feet) within `evade_time`
+## without a stomp in reach makes the bot hop.
+@export var evade_distance: float = 1.5
+@export var evade_time: float = 0.4
+
 ## Exposed for runtime_get_property verification.
 var level: Level = null
 var state: StringName = &"idle"
@@ -60,7 +83,9 @@ var hops_landed: int = 0
 var hop_failures: int = 0
 var goals_reached: int = 0
 var goals_skipped: int = 0
+## Jumps started to stomp a ball / to hop out of one's way.
 var stomp_attempts: int = 0
+var evade_hops: int = 0
 var elapsed: float = 0.0
 
 var _phase: Phase = Phase.IDLE
@@ -75,9 +100,24 @@ var _tour_index: int = -1
 var _skipped: Array[Node3D] = []
 var _best_distance: float = INF
 var _stuck_timer: float = 0.0
-var _stomp_target: Node3D = null
+var _stomp_enemy: SpikeBall = null
 ## What the stuck timer is measuring (goal walk vs a specific launch).
 var _progress_key: String = ""
+
+
+func _ready() -> void:
+	if level != null:
+		level.completed.connect(_on_level_completed)
+
+
+## A hop straight into the portal ends the level in the air, before the
+## landing is checked: it reached its target, so count it.
+func _on_level_completed(_stats: LevelStats) -> void:
+	if (_phase == Phase.LAUNCH or _phase == Phase.AIRBORNE) and hop_target != null \
+			and level.portal != null and level.planet_of(level.portal) == hop_target:
+		hops_landed += 1
+		GameLog.info(LOG_TAG, "hop into the portal on %s" % hop_target.name)
+	_launch_from = null
 
 
 func bind(target: PlayerController) -> void:
@@ -149,7 +189,7 @@ func _seek(delta: float) -> void:
 	if _phase == Phase.LAUNCH or _phase == Phase.AIRBORNE:
 		_on_landed()
 	_phase = Phase.WALK
-	_stomp_target = null
+	_stomp_enemy = null
 	var here := player.current_planet
 	if here == null:
 		_wish = Vector3.ZERO
@@ -243,6 +283,9 @@ func _walk_to_launch(here: Planet, goal_planet: Planet, delta: float) -> void:
 	if not ready_to_launch and _stuck_timer >= stuck_jump_time and angle <= stuck_launch_angle_deg:
 		ready_to_launch = true
 		GameLog.info(LOG_TAG, "launch angle stuck at %.1f deg, launching anyway" % angle)
+	if ready_to_launch and _enemy_closing_in() != null:
+		# A take-off through a rolling ball costs a heart: deal with it first.
+		ready_to_launch = false
 	if ready_to_launch:
 		hops += 1
 		_launch_from = here
@@ -257,10 +300,10 @@ func _walk_to_launch(here: Planet, goal_planet: Planet, delta: float) -> void:
 
 
 func _steer_in_air(goal_planet: Planet) -> void:
+	if _steer_stomp():
+		return
 	var aim: Vector3
-	if _stomp_target != null and is_instance_valid(_stomp_target):
-		aim = _stomp_target.global_position
-	elif player.current_planet == goal_planet and not (goal is Planet):
+	if player.current_planet == goal_planet and not (goal is Planet):
 		aim = goal.global_position
 	elif hop_target != null:
 		aim = hop_target.global_position
@@ -324,11 +367,20 @@ func _avoid_hazards(up: Vector3) -> void:
 	if player.heat > heat_hop_threshold and not _hop_would_cross(up):
 		_press_jump()
 		return
-	var enemy := _enemy_ahead(up, _wish)
-	if enemy != null and player.is_on_floor():
-		_stomp_target = enemy
-		stomp_attempts += 1
-		_press_jump()
+	if not player.is_on_floor():
+		return
+	var enemy := _stompable_enemy(up)
+	if enemy != null:
+		if _press_jump():
+			_stomp_enemy = enemy
+			stomp_attempts += 1
+			GameLog.info(LOG_TAG, "stomp jump at %s" % enemy.name)
+		return
+	enemy = _enemy_closing_in()
+	if enemy != null and _press_jump():
+		_stomp_enemy = enemy
+		evade_hops += 1
+		GameLog.info(LOG_TAG, "evade hop from %s" % enemy.name)
 
 
 ## True when a straight-up hop here would carry the player to another planet.
@@ -343,22 +395,124 @@ func _hop_would_cross(up: Vector3) -> bool:
 	return false
 
 
-func _enemy_ahead(up: Vector3, direction: Vector3) -> Node3D:
-	if direction.length_squared() < MIN_LENGTH_SQ:
+## Seconds until feet at `altitude`, moving at `radial_speed` along up under
+## constant `gravity`, pass `target_altitude` on the way down; -1 if never.
+static func time_to_descend(altitude: float, radial_speed: float, gravity: float, target_altitude: float) -> float:
+	var discriminant := radial_speed * radial_speed - 2.0 * gravity * (target_altitude - altitude)
+	if discriminant < 0.0 or gravity <= 0.0:
+		return -1.0
+	var seconds := (radial_speed + sqrt(discriminant)) / gravity
+	return seconds if seconds > 0.0 else -1.0
+
+
+## Feet altitude of a stomp: on top of the ball.
+static func stomp_altitude(enemy: SpikeBall) -> float:
+	return enemy.ball_radius * 2.0
+
+
+## A ball on this planet that a full jump started now can come down on: the
+## horizontal velocity that lines up over its predicted spot is within walking
+## speed, roughly ahead, and within the air control the flight allows. Only in
+## a clean field (a neighbour's pull would bend the arc, or carry the jump across).
+func _stompable_enemy(up: Vector3) -> SpikeBall:
+	var here := player.current_planet
+	if here == null or player.dominant_source == null or _hop_would_cross(up):
 		return null
-	for enemy: Node3D in level.demo_threats():
-		var to_enemy := enemy.global_position - player.global_position
-		var flat := VectorMath.flatten(to_enemy, up)
-		if flat.length() < enemy_jump_distance and flat.normalized().dot(direction.normalized()) > 0.6:
+	var gravity := INF
+	for height: float in stomp_probe_heights:
+		gravity = minf(gravity, _radial_gravity(player.global_position + up * height, up))
+	if gravity < player.dominant_source.strength * stomp_clean_gravity:
+		return null
+	var speed := player.tangential_velocity()
+	var min_alignment := cos(deg_to_rad(stomp_max_turn_deg))
+	for enemy: SpikeBall in level.demo_enemies():
+		if enemy.host_planet != here:
+			continue
+		var top := stomp_altitude(enemy)
+		var contact := time_to_descend(0.0, player.jump_speed, gravity, top)
+		var align := time_to_descend(0.0, player.jump_speed, gravity, top + stomp_align_height)
+		if align <= 0.0:
+			continue
+		var offset := _surface_offset(player.global_position, enemy.predicted_body_position(contact), here, up)
+		if offset.length() > stomp_engage_distance:
+			continue
+		var needed := offset / align
+		if speed.length() > player.facing_min_speed and needed.normalized().dot(speed.normalized()) < min_alignment:
+			continue
+		if needed.length() <= player.move_speed and \
+				(needed - speed).length() <= player.air_acceleration * align * stomp_control_margin:
 			return enemy
 	return null
 
 
-func _press_jump() -> void:
+## Gravity along -up at `point` from every source (no ground lock): what a
+## jump from here feels.
+func _radial_gravity(point: Vector3, up: Vector3) -> float:
+	return -GravityResolver.sample(get_tree(), point).acceleration.dot(up)
+
+
+## Tangent direction from `from` toward `to` with the length of the arc
+## between them over `planet` (a point behind the curve is far, not near).
+static func _surface_offset(from: Vector3, to: Vector3, planet: Planet, up: Vector3) -> Vector3:
+	var center := planet.global_position
+	var arc := (from - center).angle_to(to - center) * planet.radius
+	var direction := VectorMath.flatten(to - from, up)
+	return direction.normalized() * arc if direction.length_squared() > MIN_LENGTH_SQ else Vector3.ZERO
+
+
+## A ball on this planet about to touch the player (within evade_time).
+func _enemy_closing_in() -> SpikeBall:
+	for enemy: SpikeBall in level.demo_enemies():
+		if enemy.host_planet != player.current_planet:
+			continue
+		var ahead := player.global_position + player.velocity * evade_time
+		if enemy.predicted_body_position(evade_time).distance_to(ahead) < evade_distance \
+				or enemy.body.global_position.distance_to(player.global_position) < evade_distance:
+			return enemy
+	return null
+
+
+## In the air near a ball (stomp or evade hop): line up over where the ball
+## will be when the feet reach its top, by `stomp_align_height` above it, and
+## follow it down. Once below its top, keep clear of it instead. Returns false
+## when there is nothing to steer for (no ball, or another planet's ball).
+func _steer_stomp() -> bool:
+	var enemy := _stomp_enemy
+	if enemy == null or not is_instance_valid(enemy) or enemy.is_defeated or enemy.host_planet != player.current_planet:
+		return false
+	var up := player.current_up
+	var gravity := -player.gravity_sample.acceleration.dot(up)
+	var top := stomp_altitude(enemy)
+	var contact := time_to_descend(player.surface_altitude, player.vertical_speed(), gravity, top)
+	if contact <= 0.0:
+		var away := VectorMath.flatten(player.global_position - enemy.body.global_position, up)
+		_wish = away.normalized() if away.length_squared() > MIN_LENGTH_SQ else Vector3.ZERO
+		return true
+	var align := time_to_descend(player.surface_altitude, player.vertical_speed(), gravity, top + stomp_align_height)
+	var target := enemy.predicted_body_position(contact)
+	var offset := _surface_offset(player.global_position, target, enemy.host_planet, up)
+	var steer_time := maxf(align if align > 0.0 else contact, stomp_min_steer_time)
+	var needed := offset / steer_time
+	var speed := player.tangential_velocity()
+	if (needed - speed).length() > player.air_acceleration * steer_time:
+		# Out of reach now: a near miss would land on the spikes; keep clear.
+		var away := VectorMath.flatten(player.global_position - target, up)
+		_wish = away.normalized() if away.length_squared() > MIN_LENGTH_SQ else -speed.normalized()
+		return true
+	# The controller's air target is wish * max(move_speed, speed): a wish
+	# shorter than 1 sets the horizontal velocity exactly, braking included.
+	var scale := maxf(player.move_speed, speed.length())
+	_wish = (needed / scale).limit_length(1.0)
+	return true
+
+
+## Queues a jump; false when it cannot start now (in the air, or still held).
+func _press_jump() -> bool:
 	if not player.is_on_floor() or _hold_timer > 0.0:
-		return
+		return false
 	_jump_queued = true
 	_hold_timer = jump_hold_time
+	return true
 
 
 func _log_status() -> void:

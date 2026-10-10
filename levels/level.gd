@@ -150,10 +150,18 @@ func is_goal_active(node: Node3D) -> bool:
 ## Enemy bodies the DemoBot should jump onto or over.
 func demo_threats() -> Array[Node3D]:
 	var threats: Array[Node3D] = []
+	for enemy: SpikeBall in demo_enemies():
+		threats.append(enemy.body)
+	return threats
+
+
+## Live enemies (the DemoBot plans stomps from their patrol).
+func demo_enemies() -> Array[SpikeBall]:
+	var alive: Array[SpikeBall] = []
 	for enemy: SpikeBall in _enemies:
 		if is_instance_valid(enemy) and not enemy.is_defeated:
-			threats.append(enemy.body)
-	return threats
+			alive.append(enemy)
+	return alive
 
 
 func _collect_planets() -> void:

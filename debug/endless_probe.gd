@@ -44,8 +44,11 @@ func _ready() -> void:
 	var time := 0.0
 	var next_trace := 0.0
 	var completed := [false]
+	var failed := [false]
 	level.completed.connect(func(_stats: LevelStats) -> void: completed[0] = true)
-	while time < _limit and not completed[0]:
+	# Listening also stops Level from reloading the scene on death (a loop here).
+	level.failed.connect(func(_stats: LevelStats) -> void: failed[0] = true)
+	while time < _limit and not completed[0] and not failed[0]:
 		await get_tree().physics_frame
 		time += get_physics_process_delta_time()
 		if time >= next_trace:
@@ -54,5 +57,7 @@ func _ready() -> void:
 				time, player.current_planet.name if player.current_planet != null else "none", player.is_on_floor(),
 				player.surface_altitude, player.velocity.length(), player.get_platform_velocity().length(),
 				player.current_up, bot.goal.name if bot.goal != null and is_instance_valid(bot.goal) else "-", bot.state, player.heat])
-	GameLog.info(LOG_TAG, "result: completed=%s time=%.1f collected=%d/%d" % [completed[0], time, level.stats.collected, level.stats.total])
+	GameLog.info(LOG_TAG, "result: completed=%s died=%s time=%.1f collected=%d/%d enemies=%d stomps=%d stomp_attempts=%d damage=%d hops=%d/%d skipped=%d evade_hops=%d" % [
+		completed[0], failed[0], time, level.stats.collected, level.stats.total, spec.enemies.size(), level.stats.stomps,
+		bot.stomp_attempts, player.health.damage_taken, bot.hops_landed, bot.hops, bot.goals_skipped, bot.evade_hops])
 	get_tree().quit()

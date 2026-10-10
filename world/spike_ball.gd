@@ -87,6 +87,16 @@ func _physics_process(delta: float) -> void:
 	_visual.rotate_object_local(Vector3.RIGHT, deg_to_rad(patrol_speed_deg) * delta * ROLL_SPIN_FACTOR)
 
 
+## World position of the body `seconds` from now: the node turns about its
+## own `patrol_axis` (fixed in world space) at a constant rate, so the body
+## sweeps a great circle around the planet centre.
+func predicted_body_position(seconds: float) -> Vector3:
+	var center := global_position
+	var axis := (global_basis * patrol_axis).normalized()
+	var turned := (body.global_position - center).rotated(axis, deg_to_rad(patrol_speed_deg) * seconds)
+	return center + turned
+
+
 func ball_up() -> Vector3:
 	if host_planet == null:
 		return body.global_basis.y
