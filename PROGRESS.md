@@ -363,7 +363,7 @@ Hepsi aynı plan: menü → 3 tutorial (T2'de duraklat → Ayarlar → hassasiye
 | **Final** | bağımsız, 144 Hz | 8 | 0 / 0 | 193,91 sn | 1 | 1 | 36/37 | **129,0** | 2/8 (E3 32,0; E4 33,2) | 1047,3 ms (E5, 1,86 sn) |
 | vsync kapalı | bağımsız, 144 Hz; testlerimle paralel koştu | 8 | 0 / 0 | 193,79 sn | 1 | 1 | 36/37 | 108,3 | 6/8 (T3–E5, 31–34) | 86,6 ms |
 
-- Oynanış deterministik: seviye süreleri koşular arasında en çok 0,05 sn farklı; hasar, ezme ve zıplama sayıları aynı.
+- Oynanış neredeyse deterministik. 10 koşuda seviye süreleri en çok 0,11 sn farklı (E5); diğer seviyelerde fark ≤ 0,04 sn. En büyük farklar hit-stop olan seviyelerde (E4 hasar, E5 ezme); hit-stop'un dönüşü gerçek kare zamanına bağlı. 8 seviyelik koşuların hepsinde hasar 1, ezme 1, zıplama 36/37.
 - Pencereli 1 çıkışta çökmüştü (yukarıdaki düzeltme). Ondan sonraki pencereli koşuların hepsi exit 0.
 - `--disable-vsync` macOS pencere kipinde kare hızını açmadı (T1/T2 yine 144,5–144,9 FPS). Bu yüzden tavansız kare maliyeti ölçülemedi.
 
@@ -386,7 +386,7 @@ Exit 0, hata 0, uyarı 0. Koşu 218,3 sn; seviye süreleri toplamı 193,91 sn.
 
 ### Performans yorumu
 - **Ortalama:** final koşuda her seviyede ≥ 97 FPS, kare ağırlıklı 129,0 FPS. 60 FPS hedefi ortalamada sağlanıyor.
-- **%1 düşük:** final koşuda 8 seviyenin 5'inde ≥ 110 FPS; E3 ve E4'te ~32 FPS. Aynı seviyeler başka koşularda iyi (E3: pencereli 1'de 120,7, Beckett 2'de 96,9). Hangi seviyenin düştüğü koşudan koşuya değişiyor; oynanış ise aynı. Yani düşüş oyundaki belirli bir olaya bağlı görünmüyor.
+- **%1 düşük:** final koşuda 8 seviyenin 5'inde ≥ 110 FPS; E3 ve E4'te ~32 FPS. Aynı seviyeler başka koşularda iyi (E3: pencereli 1'de 120,7, Beckett 2'de 96,9). Hangi seviyenin düştüğü koşudan koşuya değişiyor; oynanış ise hemen hemen aynı (süre farkı ≤ 0,11 sn). Yani düşüş oyundaki belirli bir olaya bağlı görünmüyor.
 - **~1 sn'lik tek kare takılmalar:** 5 gerçek zamanlı koşunun 3'ünde birer kez görüldü, her seferinde farklı seviyede ve anda.
 - **Ölçüm sırasında makinenin durumu** (ölçüldü):
   - Unity Editor 20:42'den beri açıktı; 23:36'da %247 CPU ve 9,3 GB bellek kullanıyordu.
