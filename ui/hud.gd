@@ -9,6 +9,8 @@ const BANNER_OUT := 0.45
 const POP_SCALE := 1.35
 const POP_TIME := 0.18
 const HEART_SIZE := Vector2(30, 28)
+const FLASH_ALPHA := 0.35
+const FLASH_TIME := 0.4
 
 var _level: Level = null
 var _banner_tween: Tween = null
@@ -20,6 +22,7 @@ var _banner_tween: Tween = null
 @onready var _hint_panel: PanelContainer = %HintPanel
 @onready var _hint_label: Label = %HintLabel
 @onready var _banner: Label = %Banner
+@onready var _damage_flash: ColorRect = %DamageFlash
 
 
 func _ready() -> void:
@@ -56,6 +59,8 @@ func _on_stardust_changed(collected: int, total: int) -> void:
 func _on_damaged(_amount: int, hearts: int, _cause: String) -> void:
 	_update_hearts(hearts)
 	_pop(_hearts)
+	_damage_flash.color.a = FLASH_ALPHA
+	create_tween().tween_property(_damage_flash, "color:a", 0.0, FLASH_TIME)
 
 
 func _build_hearts(count: int) -> void:

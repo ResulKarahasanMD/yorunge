@@ -5,6 +5,7 @@ extends Node
 ## menus and the level-complete screen join in milestone f).
 
 const LOG_TAG := "Main"
+const QUIT_SETTLE_FRAMES := 5
 
 @export var next_level_delay: float = 2.5
 @export var retry_delay: float = 1.5
@@ -62,4 +63,14 @@ func _finish_run() -> void:
 	for stats: LevelStats in GameState.history:
 		GameLog.info(LOG_TAG, "  %s" % stats.to_dict())
 	if DemoMode.should_exit_on_finish():
-		get_tree().quit()
+		quit_game()
+
+
+## Single exit path: silence audio, let the audio server release its
+## playbacks for a few frames, then quit (otherwise they leak at exit).
+func quit_game() -> void:
+	if AudioSystem.current != null:
+		AudioSystem.current.stop_all()
+	for i in QUIT_SETTLE_FRAMES:
+		await get_tree().process_frame
+	get_tree().quit()

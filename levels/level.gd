@@ -10,6 +10,9 @@ extends Node3D
 signal stardust_changed(collected: int, total: int)
 signal portal_opened
 signal enemy_defeated
+## Positional twins of the signals above, for effects (position, local up).
+signal stardust_collected_at(position: Vector3, up: Vector3)
+signal enemy_defeated_at(position: Vector3, up: Vector3)
 signal completed(stats: LevelStats)
 signal failed(stats: LevelStats)
 
@@ -31,6 +34,7 @@ var input_source: PlayerInput = null
 var stats: LevelStats = LevelStats.new()
 var portal: ExitPortal = null
 var hints: TutorialHints = null
+var feedback: LevelFeedback = null
 var elapsed: float = 0.0
 
 var _planets: Array[Planet] = []
@@ -54,6 +58,10 @@ func _ready() -> void:
 		if child is TutorialHints:
 			hints = child as TutorialHints
 			hints.setup(self)
+	feedback = LevelFeedback.new()
+	feedback.name = "Feedback"
+	add_child(feedback)
+	feedback.setup(self)
 	if _stardust.is_empty() and portal != null:
 		_open_portal()
 	GameLog.info(LOG_TAG, "ready: %s (input=%s, planets=%d, stardust=%d, enemies=%d, links=%s)" % [
@@ -194,6 +202,7 @@ func _install_input() -> void:
 func _on_stardust_collected(stardust: Stardust) -> void:
 	_stardust.erase(stardust)
 	stats.collected += 1
+	stardust_collected_at.emit(stardust.global_position, stardust.global_basis.y)
 	GameLog.info(LOG_TAG, "stardust %d/%d" % [stats.collected, stats.total])
 	stardust_changed.emit(stats.collected, stats.total)
 	if _stardust.is_empty() and portal != null:
@@ -209,6 +218,7 @@ func _on_enemy_defeated(enemy: SpikeBall) -> void:
 	_enemies.erase(enemy)
 	stats.stomps += 1
 	enemy_defeated.emit()
+	enemy_defeated_at.emit(enemy.body.global_position, enemy.ball_up())
 
 
 func _on_portal_entered() -> void:

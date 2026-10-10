@@ -23,6 +23,8 @@ buses/default_bus_layout="uid://bwfpvphxe25m3"
 
 BeckettRuntime="*uid://do68dqybesb7r"
 GameState="*res://autoload/game_state.gd"
+AudioManager="*res://autoload/audio_manager.gd"
+Juice="*res://autoload/juice.gd"
 
 [beckett]
 

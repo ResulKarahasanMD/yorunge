@@ -46,6 +46,8 @@ var _sloppy: bool = false
 func _ready() -> void:
 	DemoMode.forced = true
 	_parse_args()
+	while not AudioSystem.current.ready_for_playback:
+		await get_tree().process_frame
 	GameLog.info(LOG_TAG, "profile core=%s influence=%s launch=%s" % [
 		_core_margin if _core_margin >= 0.0 else "default", _influence_margin if _influence_margin >= 0.0 else "default",
 		"sloppy" if _sloppy else "careful"])
@@ -63,9 +65,9 @@ func _ready() -> void:
 		var carry := await _carry_trial(spin)
 		GameLog.info(LOG_TAG, "carry spin=%.0f deg/s drift=%.3f m floor_ratio=%.2f" % [spin, carry["drift"], carry["floor_ratio"]])
 	var stomp := await _enemy_trial(true)
-	GameLog.info(LOG_TAG, "enemy stomp: defeated=%s damage=%d bounced=%s" % [stomp["defeated"], stomp["damage"], stomp["bounced"]])
+	GameLog.info(LOG_TAG, "enemy stomp: defeated=%s damage=%d bounced=%s | juice %s" % [stomp["defeated"], stomp["damage"], stomp["bounced"], _juice(stomp)])
 	var side := await _enemy_trial(false)
-	GameLog.info(LOG_TAG, "enemy side hit: defeated=%s damage=%d bounced=%s" % [side["defeated"], side["damage"], side["bounced"]])
+	GameLog.info(LOG_TAG, "enemy side hit: defeated=%s damage=%d bounced=%s | juice %s" % [side["defeated"], side["damage"], side["bounced"], _juice(side)])
 	for hopping: bool in [false, true]:
 		var lava := await _lava_trial(hopping)
 		GameLog.info(LOG_TAG, "lava %s %.0f s: damage=%d bounces=%d max_heat=%.2f" % [
@@ -161,14 +163,14 @@ func _respawn_trial() -> Dictionary:
 func _enemy_trial(stomp: bool) -> Dictionary:
 	var top := Vector3(0.0, RADIUS_A + SPAWN_LIFT, 0.0)
 	var spawn := top + Vector3.UP * DROP_HEIGHT if stomp else top
-	var level := _build_level([_planet_spec("Arena", RADIUS_A, Vector3.ZERO)],
-		Transform3D(Basis.IDENTITY, spawn), Level.InputMode.NONE)
-	var planet := level.planets()[0]
 	var enemy := SPIKE_SCENE.instantiate() as SpikeBall
 	enemy.patrol_axis = Vector3.RIGHT
 	enemy.start_direction = Vector3.UP if stomp else Vector3(0.0, 0.6, -0.8)
 	enemy.patrol_speed_deg = 0.0 if stomp else SIDE_HIT_SPEED_DEG
-	planet.add_child(enemy)
+	# Added before the level enters the tree, like enemies in real level scenes.
+	var level := _build_level([_planet_spec("Arena", RADIUS_A, Vector3.ZERO)],
+		Transform3D(Basis.IDENTITY, spawn), Level.InputMode.NONE, func(planets: Array[Planet]) -> void:
+			planets[0].add_child(enemy))
 	var player := level.player
 	var bounced := [false]
 	player.bounced.connect(func() -> void: bounced[0] = true)
@@ -176,7 +178,13 @@ func _enemy_trial(stomp: bool) -> Dictionary:
 	while time < ENEMY_TIMEOUT and not enemy.is_defeated and player.health.damage_taken == 0:
 		await get_tree().physics_frame
 		time += get_physics_process_delta_time()
-	var result := {"defeated": enemy.is_defeated, "damage": player.health.damage_taken, "bounced": bounced[0]}
+	var defeated := enemy.is_defeated
+	await _wait(0.4)
+	var visual := player.get_node(^"Visual") as PlayerVisual
+	var result := {"defeated": defeated, "damage": player.health.damage_taken, "bounced": bounced[0],
+		"hit_stops": JuiceSystem.current.hit_stops, "time_scale": Engine.time_scale,
+		"trauma_peak": level.camera_rig.trauma_peak, "squash": visual.min_scale_y, "stretch": visual.max_scale_y,
+		"bursts": Vfx.bursts_spawned, "plays": AudioSystem.current.plays_total}
 	await _dispose(level)
 	return result
 
@@ -205,12 +213,20 @@ func _lava_trial(hopping: bool) -> Dictionary:
 	return result
 
 
+func _juice(result: Dictionary) -> String:
+	return "hit_stops=%d time_scale_after=%.2f trauma_peak=%.2f scale_y=[%.2f, %.2f] bursts=%d sfx_plays=%d" % [
+		result["hit_stops"], result["time_scale"], result["trauma_peak"], result["squash"], result["stretch"],
+		result["bursts"], result["plays"]]
+
+
 func _planet_spec(planet_name: String, radius: float, position: Vector3) -> Dictionary:
 	return {"name": planet_name, "radius": radius, "position": position, "spin": 0.0}
 
 
-func _build_level(specs: Array[Dictionary], spawn: Transform3D, mode: Level.InputMode) -> Level:
+func _build_level(specs: Array[Dictionary], spawn: Transform3D, mode: Level.InputMode,
+		before_enter: Callable = Callable()) -> Level:
 	var level := Level.new()
+	var built: Array[Planet] = []
 	level.name = "ProbeLevel"
 	level.input_mode = mode
 	for spec: Dictionary in specs:
@@ -225,6 +241,7 @@ func _build_level(specs: Array[Dictionary], spawn: Transform3D, mode: Level.Inpu
 		if _influence_margin >= 0.0:
 			planet.influence_margin = _influence_margin
 		level.add_child(planet)
+		built.append(planet)
 	var player := PLAYER_SCENE.instantiate() as PlayerController
 	player.transform = spawn
 	level.add_child(player)
@@ -232,6 +249,8 @@ func _build_level(specs: Array[Dictionary], spawn: Transform3D, mode: Level.Inpu
 	level.add_child(rig)
 	level.player = player
 	level.camera_rig = rig
+	if before_enter.is_valid():
+		before_enter.call(built)
 	add_child(level)
 	return level
 

@@ -76,6 +76,13 @@ const SIGHT_SEARCH_STEPS := 10
 @export var auto_align_sharpness: float = 1.8
 @export var auto_align_min_speed: float = 1.0
 
+@export_group("Shake")
+## Trauma (0..1) lost per second; shake strength is trauma squared.
+@export var trauma_decay: float = 1.6
+@export var shake_offset: float = 0.3
+@export var shake_roll_deg: float = 2.5
+@export var shake_frequency: float = 22.0
+
 @export_group("Debug")
 ## Ray-tests camera -> player head and chest every frame and counts blocked frames.
 @export var track_visibility: bool = false
@@ -87,6 +94,10 @@ var allowed_distance: float = 0.0
 ## Anchor -> ideal-camera distance if nothing were in the way.
 var full_distance: float = 0.0
 var occlusion_events: int = 0
+## Camera shake state and counters.
+var trauma: float = 0.0
+var trauma_peak: float = 0.0
+var shake_events: int = 0
 ## Largest single-frame outward step while easing back after an occlusion.
 var max_ease_out_step: float = 0.0
 ## Largest single-frame increase of view_distance for any reason.
@@ -107,6 +118,8 @@ var _pending_mouse: Vector2 = Vector2.ZERO
 var _time_since_look: float = INF
 var _occluded: bool = false
 var _query: PhysicsShapeQueryParameters3D = PhysicsShapeQueryParameters3D.new()
+var _shake_noise: FastNoiseLite = FastNoiseLite.new()
+var _shake_time: float = 0.0
 
 @onready var camera: Camera3D = $Camera3D
 
@@ -120,6 +133,7 @@ func _ready() -> void:
 	probe.radius = collision_radius
 	_query.shape = probe
 	_query.collision_mask = PhysicsLayers.WORLD
+	_shake_noise.frequency = 1.0
 	if target != null:
 		set_target(target)
 
@@ -144,6 +158,13 @@ func snap_to_target() -> void:
 	_boom_ceiling_deg = _target_ceiling_deg()
 	view_distance = INF
 	_place_camera(target.global_transform, 0.0)
+
+
+## Adds camera shake (impacts, damage). Saturates at 1.
+func add_trauma(amount: float) -> void:
+	trauma = minf(trauma + amount, 1.0)
+	trauma_peak = maxf(trauma_peak, trauma)
+	shake_events += 1
 
 
 ## Yaw frame (Y = up, -Z = forward on the ground plane) used by HumanInput.
@@ -231,6 +252,7 @@ func _process(delta: float) -> void:
 	var pivot := pose.origin + _frame.y * pivot_height
 	_smoothed_pivot = _smoothed_pivot.lerp(pivot, 1.0 - exp(-follow_sharpness * delta))
 	_place_camera(pose, delta)
+	_apply_shake(delta)
 	if track_visibility:
 		_track_visibility(pose)
 
@@ -338,6 +360,18 @@ func _chest_visible_distance(chest: Vector3, anchor: Vector3, direction: Vector3
 		else:
 			low = mid
 	return low
+
+
+func _apply_shake(delta: float) -> void:
+	_shake_time += delta
+	trauma = maxf(0.0, trauma - trauma_decay * delta)
+	if trauma <= 0.0:
+		return
+	var strength := trauma * trauma
+	var t := _shake_time * shake_frequency
+	var offset := Vector3(_shake_noise.get_noise_2d(t, 0.0), _shake_noise.get_noise_2d(t, 100.0), 0.0) * shake_offset * strength
+	var roll := _shake_noise.get_noise_2d(t, 200.0) * deg_to_rad(shake_roll_deg) * strength
+	camera.global_transform = camera.global_transform * Transform3D(Basis(Vector3.FORWARD, roll), offset)
 
 
 ## Fraction (0..1) of `motion` the probe sphere can travel from `from` unblocked.

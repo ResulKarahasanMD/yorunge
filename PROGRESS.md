@@ -7,8 +7,8 @@
 | (b) Çoklu gezegen + geçişler | `mb` | ✅ | 2026-10-10 |
 | (c) Toz, portal, seviye akışı, düşman, hasar | `mc` | ✅ | 2026-10-10 |
 | (d) Shader ve görsel cila | `md` | ✅ | 2026-10-10 |
-| (e) Ses + juice | `me` | ⏳ sürüyor | |
-| (f) Menüler + kayıt | `mf` | ⬜ | |
+| (e) Ses + juice | `me` | ✅ | 2026-10-10 |
+| (f) Menüler + kayıt | `mf` | ⏳ sürüyor | |
 | (g) Prosedürel mod | `mg` | ⬜ | |
 | (h) Uçtan uca DemoBot testi | `mh` | ⬜ | |
 
@@ -211,6 +211,46 @@ Beckett MCP oturumu bu revizyon sırasında koptu (Godot 8770'te dinliyor, Claud
 - **Headless demo:** 3 tutorial'ın süreleri (20,22 / 16,47 / 43,15 sn) önceki milestone'la birebir aynı; görsel değişiklik oynanışı etkilemedi.
 - **Testler:** **1617 kontrol, 0 hata**. `test_visuals` 15 kontrol: dekor sayısı = alan × yoğunluk, üst sınır, yüzeyde ve dik duruyor, seed deterministik, outline geçişi, gezegen shader parametreleri. Not: MultiMesh verisi headless'ta okunamadığı için yerleşim saf fonksiyondan test ediliyor.
 
+## (e) Ses + juice — 2026-10-10
+### Kod
+- **Ses:**
+  - `audio/SynthPatch` (dalga, frekans süpürmesi, ADSR, vibrato, arpej, gürültü karışımı, duty, alçak geçiren filtre).
+  - `audio/Synth` → mono PCM16 `AudioStreamWAV` (44,1 kHz).
+  - Ortam pad'i 22,05 kHz, 6 sn döngü, `LOOP_FORWARD`. Tüm frekanslar ve tremolo hızları döngü başına tam devre yuvarlanıyor, böylece dikiş yerinde süreklilik var.
+  - `audio/SfxLibrary`: 11 efekt + pad akoru.
+- `autoload/AudioManager` (`AudioSystem.current`):
+  - Önce efektleri, sonra pad'i **işçi iş parçacığında** render ediyor.
+  - 8 sesli havuz, boş ses yoksa en eskisini durdurup kullanıyor; oynatmada ±%5 rastgele perde.
+  - Music/SFX busları kodla oluşturuluyor, pad 2,5 sn'de içeri geliyor.
+  - Sayaçlar: çalınan, düşen, çalmak için durdurulan ses, aynı anda en çok çalan ses.
+- `autoload/Juice` (`JuiceSystem.current`): hit-stop, **nesil numarasıyla** geri açılıyor.
+- `vfx/Vfx`: 6 tür tek seferlik GPU parçacık patlaması (toplama, toz, ezme halkası, hasar, portal, köz). Gezegenin yukarısına hizalı, yumuşak radyal sprite. Malzeme ve mesh tür başına önbellekli, seviye yüklenirken ısıtılıyor.
+- `OrbitCameraRig.add_trauma`: sarsıntı = travma² × gürültü (kaydırma + yuvarlanma), saniyede 1,6 sönüyor.
+- `PlayerVisual`: sönümlü yayla esneme/ezilme (hacim korunuyor). Zıplamada +0,28, sıçramada +0,2, inişte darbe × 0,025 (en fazla 0,4).
+- `levels/LevelFeedback`: bütün tepkiler tek yerde. Oyun kodu yalnız sinyal yayıyor; `Level` yeni konumlu sinyaller ekledi. `Hud`: hasarda kırmızı ekran parlaması.
+- `main/GameMain.quit_game()`: sesi durdurur, 5 kare bekler, sonra çıkar.
+
+### Doğrulama
+- **Headless `test_audio`** (63 kontrol):
+  - 11 efektin hepsinde uzunluk = süre × 44 100, NaN yok, kırpma yok, tepe 0,15–0,45, 16-bit PCM.
+  - Pad: 132 300 örnek; dikiş adımı **0,0050**, %99'luk komşu adım **0,0110** → tık yok.
+  - Render deterministik; perde varyantı farklı.
+- **Ölçüm düzeneği (headless):**
+  - Ezme → hit-stop 1, `time_scale` sonra **1,00**, travma 0,45, `scale_y` 0,97–1,19, 2 patlama, 3 ses.
+  - Yandan çarpma → hit-stop, zaman geri açıldı, travma 0,60.
+- **Bulunan hatalar:**
+  1. Hit-stop bitişi duvar saatiyle karşılaştırılıyordu; `--fixed-fps`'te kareler gerçek zamandan hızlı aktığı için oyun **0,05 hızda takılı kalıyordu**. Nesil numarasına geçildi.
+  2. Ses render'ı ~1 sn sürüyor, ilk sesler düşüyordu. Tek render + oynatmada perde yayılımına geçildi; efektler artık 200–220 ms'de hazır.
+  3. Her parçacık patlaması yeni malzeme oluşturuyordu: fizik süresi ortalama **8,4 ms** (p95 22 ms). Önbellekle 4,3 ms, ısıtmayla **1,3–2,0 ms** (en fazla 6 ms).
+  4. Headless çıkışta 14–15 nesne sızıyordu (`AudioStreamPlaybackWAV`/`WAV`). Pencereli koşuda gerçek ses sürücüsüyle sızıntı yok. Sahte sürücü hiç karıştırma yapmadığı için oynatmalar serbest kalmıyor. Sürücü "Dummy" ise oynatma başlatılmıyor, sayaç artıyor → headless uyarı 0.
+- **Beckett (demo, gerçek ses sürücüsü):**
+  - `plays_total` 22, düşen 0, durdurulan 0, en çok 2 ses aynı anda.
+  - T3'te travma tepe 0,12, `PlayerVisual.min_scale_y` 0,96. Uyarı 0.
+- **Parçacık vitrini:** `levels/dev/vfx_showcase.tscn`, CLI `FrameCapture` ile görüntü alındı. İlk sürümde kare pikseller vardı; radyal gradyan dokusuyla yumuşak yuvarlak kıvılcımlara geçildi.
+- **Performans** (12 sn, demo T1→T3): FPS **119,5 ort / 117 min**, fizik 1,3 ms. Bir pencerede seviye geçişine denk gelen tek 60 FPS düşüşü görüldü (seviye kuruluşu).
+- **Headless demo:** 3 tutorial süreleri aynı (hit-stop yalnız hasar ve ezmede; demoda ikisi de olmadı). Hata ve uyarı 0. **Testler 1680 kontrol, 0 hata.**
+- **Ses kalitesini ben duyamıyorum:** senin dinlemen gerekiyor.
+
 ## Çalışma modu (2026-10-10, kullanıcı)
 b→h tek oturumda, onay beklemeden. Her milestone'da şu adımlar:
 1. Testler.
@@ -237,6 +277,10 @@ _(kullanıcı sonradan değiştirebilir; her biri gerekçesiyle)_
 - **Görsel dil: toon + ince koyu dış hat** (karakter, düşman, portal); gezegenlerde dış hat yok (büyük kürelerde kalın görünüyor). AgX tonemap ve glow.
 - **Dekorasyonlar çarpışmasız** (oynanışı etkilemesin, DemoBot ölçümleri değişmesin). Gölge düşürmüyor (performans).
 - **`shaders/debug_checker.gdshader` artık kullanılmıyor**; silme kullanıcı onayına bırakıldı (kural: silme öncesi sor).
+- **Ses varyantları önceden render edilmiyor;** her ses bir kez render ediliyor, oynatmada ±%5 rastgele `pitch_scale` (plan 3 varyant diyordu). Gerekçe: efektler ~1 sn yerine ~0,2 sn'de hazır, ilk zıplama sesi kaybolmuyor.
+- **Pad:** A minör çevresinde (A2 E3 A3 C4), 6 sn döngü, −12 dB müzik.
+- **Hit-stop yalnız hasar (90 ms) ve ezmede (60 ms)**, hız 0,05. Toplama, iniş ve portal yalnız sarsıntı ve ses alıyor (akışı bozmasın).
+- **Parçacıklar `StandardMaterial3D` (billboard)** kullanıyor; toon shader'ın parçacığa katkısı yok, asset de yok.
 
 ## Ölçümler
 | Milestone | Sahne | FPS ort | FPS min | draw call ort | physics_process ort | Not |
@@ -247,8 +291,10 @@ _(kullanıcı sonradan değiştirebilir; her biri gerekçesiyle)_
 | (c) | tutorial_03 (4 gezegen, 3 düşman, demo) | 120 | 120 | 71 | 1,3 ms | 5 sn |
 | (d) | gallery (4 tip, sabit kamera) | 119,8 | 118 | 80 | 1,4 ms | 10 sn, shader'lar + dekor + glow |
 | (d) | tutorial_01 demo | 119,6 | 117 | 77 | 3,5 ms | 10 sn |
+| (e) | demo T1→T3 (ses + parçacık + sarsıntı) | 119,5 | 117 | 90 | 1,3 ms | 12 sn; parçacık önbelleği + ısıtma sonrası |
 
 ## Açık sorunlar / notlar
+- Seviye geçişinde (yeni seviye kurulurken) tek karelik takılma ölçüldü (FPS 60'a). Dekorasyon üretimi ve sahne kurulumu. Geçiş zaten bekleme süresinde.
 - (a) `get_performance_monitors` → `process_time` max 0,75 sn, ort 0,14 sn. FPS ort 104 ile çelişiyor; büyük olasılıkla Beckett örneklemesi/ekran görüntüsü sırasında ana iş parçacığı bekliyor. (d)'de daha kalabalık sahnede yeniden ölçülecek.
 - Beckett MCP koparsa Claude Code'da `/mcp` ile yeniden bağlanmak gerekiyor; o sürede doğrulama CLI ile yapılıyor (bkz. CLAUDE.md).
 - Beckett `validate_script`, geçici kopyada sınıf adını `__BeckettValidate` yapıyor. Bu yüzden `self`'i tipli parametreye geçiren kod doğrulamadan geçmiyor. Tasarım buna göre: Level, `player.input_source` ve `input.bind(player)` bağlamasını dışarıdan yapıyor.

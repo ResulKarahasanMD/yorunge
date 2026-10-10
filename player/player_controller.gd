@@ -12,6 +12,8 @@ signal dominant_source_changed(source: GravitySource)
 signal respawned
 ## Hazard / enemy bounce (hot foot, stomp, knockback) — juice hooks in (e).
 signal bounced
+## Lava heat reached full: a heart is lost (unless invulnerable) and the player hops.
+signal burned
 
 const LOG_TAG := "Player"
 const GRAVITY_LOG_TAG := "Gravity"
@@ -246,6 +248,7 @@ func _update_heat(delta: float) -> void:
 	if heat >= 1.0:
 		heat = 0.0
 		health.take_damage(damage, "lava")
+		burned.emit()
 		bounce(hot_foot_speed)
 
 
