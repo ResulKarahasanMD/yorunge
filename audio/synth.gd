@@ -8,6 +8,13 @@ const PAD_MIX_RATE := 22050
 const PCM_MAX := 32767.0
 const BYTES_PER_SAMPLE := 2
 const NOISE_SEED := 7919
+## Pad voices per chord note: detuned this many Hz around it.
+const PAD_DETUNE_HZ: Array[float] = [-0.35, 0.0, 0.35]
+## Pad tremolo: gain swings between BASE - DEPTH and BASE + DEPTH.
+const PAD_TREMOLO_BASE := 0.6
+const PAD_TREMOLO_DEPTH := 0.4
+## Per-voice tremolo phase offset (cycles), so the voices never pulse together.
+const PAD_TREMOLO_PHASE_STEP := 0.13
 
 
 ## Renders `patch` with all frequencies scaled by `pitch_scale`.
@@ -52,7 +59,7 @@ static func render_pad_samples(chord_hz: PackedFloat32Array, loop_seconds: float
 	samples.resize(count)
 	var voices: Array[Vector3] = []
 	for note: float in chord_hz:
-		for detune: float in [-0.35, 0.0, 0.35]:
+		for detune: float in PAD_DETUNE_HZ:
 			var cycles := roundf((note + detune) * loop_seconds)
 			var tremolo_cycles := float(1 + voices.size() % 3)
 			voices.append(Vector3(cycles, tremolo_cycles, float(voices.size())))
@@ -61,7 +68,7 @@ static func render_pad_samples(chord_hz: PackedFloat32Array, loop_seconds: float
 		var phase := float(i) / count
 		var sum := 0.0
 		for voice: Vector3 in voices:
-			var tremolo := 0.6 + 0.4 * sin(TAU * (voice.y * phase + voice.z * 0.13))
+			var tremolo := PAD_TREMOLO_BASE + PAD_TREMOLO_DEPTH * sin(TAU * (voice.y * phase + voice.z * PAD_TREMOLO_PHASE_STEP))
 			sum += sin(TAU * voice.x * phase + voice.z) * tremolo
 		samples[i] = sum * gain
 	return samples

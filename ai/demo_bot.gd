@@ -19,6 +19,10 @@ const LOG_TAG := "DemoBot"
 const MIN_LENGTH_SQ := 0.000001
 ## Smallest improvement that counts as progress for stuck detection.
 const STUCK_PROGRESS := 0.3
+## Picking the next goal, one hop costs as much as walking this far (metres).
+const HOP_COST := 100.0
+## Closer than this (squared, metres) to the aim point in the air: no steering.
+const MIN_AIM_DISTANCE_SQ := 0.01
 
 @export var behavior: Behavior = Behavior.SEEK
 @export var log_interval: float = 1.0
@@ -237,7 +241,7 @@ func _cheapest(candidates: Array[Node3D]) -> Node3D:
 	var best_cost := INF
 	for node: Node3D in candidates:
 		var hops_needed := maxi(level.planet_path(here, level.planet_of(node)).size() - 1, 0) if here != null else 0
-		var cost := hops_needed * 100.0 + player.global_position.distance_to(node.global_position)
+		var cost := hops_needed * HOP_COST + player.global_position.distance_to(node.global_position)
 		if cost < best_cost:
 			best_cost = cost
 			best = node
@@ -310,7 +314,7 @@ func _steer_in_air(goal_planet: Planet) -> void:
 	else:
 		aim = goal_planet.global_position
 	var flat := VectorMath.flatten(aim - player.global_position, player.current_up)
-	_wish = flat.normalized() if flat.length_squared() > 0.01 else Vector3.ZERO
+	_wish = flat.normalized() if flat.length_squared() > MIN_AIM_DISTANCE_SQ else Vector3.ZERO
 
 
 func _on_landed() -> void:

@@ -37,6 +37,12 @@ const CEILING_SEARCH_STEPS := 32
 ## and the second sight line the camera keeps clear.
 const CHEST_HEIGHT := 0.75
 const SIGHT_SEARCH_STEPS := 10
+## horizon_offset_deg() for a camera inside the planet (no horizon at all).
+const HORIZON_INSIDE_PLANET_DEG := -90.0
+## Rows of the shake noise sampled for x, y and roll; far apart, so uncorrelated.
+const SHAKE_ROW_X := 0.0
+const SHAKE_ROW_Y := 100.0
+const SHAKE_ROW_ROLL := 200.0
 
 @export var target: PlayerController
 
@@ -222,7 +228,7 @@ static func horizon_offset_deg(radius: float, pivot_h: float, arm: float,
 	var cam_back := arm * cos(elevation)
 	var cam_dist := sqrt(cam_up * cam_up + cam_back * cam_back)
 	if cam_dist <= radius:
-		return -90.0
+		return HORIZON_INSIDE_PLANET_DEG
 	var horizon := -atan2(cam_up, cam_back) + asin(radius / cam_dist)
 	return rad_to_deg(horizon) - view_pitch_deg
 
@@ -383,8 +389,8 @@ func _apply_shake(delta: float) -> void:
 		return
 	var strength := trauma * trauma
 	var t := _shake_time * shake_frequency
-	var offset := Vector3(_shake_noise.get_noise_2d(t, 0.0), _shake_noise.get_noise_2d(t, 100.0), 0.0) * shake_offset * strength
-	var roll := _shake_noise.get_noise_2d(t, 200.0) * deg_to_rad(shake_roll_deg) * strength
+	var offset := Vector3(_shake_noise.get_noise_2d(t, SHAKE_ROW_X), _shake_noise.get_noise_2d(t, SHAKE_ROW_Y), 0.0) * shake_offset * strength
+	var roll := _shake_noise.get_noise_2d(t, SHAKE_ROW_ROLL) * deg_to_rad(shake_roll_deg) * strength
 	camera.global_transform = camera.global_transform * Transform3D(Basis(Vector3.FORWARD, roll), offset)
 
 
