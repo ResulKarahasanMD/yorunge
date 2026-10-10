@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="PlanetStyle" format=3]
+
+[ext_resource type="Script" path="res://world/planet_style.gd" id="1_style"]
+
+[resource]
+script = ExtResource("1_style")
+display_name = "Buzlu"
+surface = 1
+color_low = Color(0.55, 0.75, 0.92, 1)
+color_mid = Color(0.75, 0.9, 1, 1)
+color_high = Color(0.95, 0.98, 1, 1)
+color_accent = Color(0.4, 0.85, 1, 1)
+atmosphere_color = Color(0.6, 0.85, 1, 1)
+acceleration_multiplier = 0.35
+deceleration_multiplier = 0.06
+contact_damage = 0

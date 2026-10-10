@@ -9,11 +9,11 @@ extends CharacterBody3D
 signal jumped
 signal landed(impact_speed: float)
 signal dominant_source_changed(source: GravitySource)
+signal respawned
 
 const LOG_TAG := "Player"
 const GRAVITY_LOG_TAG := "Gravity"
 const MIN_LENGTH_SQ := 0.000001
-const ANTIPARALLEL_DOT := -0.999
 
 @export_group("Movement")
 @export var move_speed: float = 7.0
@@ -51,6 +51,8 @@ var surface_altitude: float = 0.0
 ## Planet under the player, or null while drifting through free space.
 var current_planet: Planet = null
 
+@onready var respawn_tracker: RespawnTracker = $RespawnTracker
+
 var _coyote_timer: float = 0.0
 var _jump_buffer_timer: float = 0.0
 var _jump_cut_done: bool = true
@@ -77,6 +79,20 @@ func _physics_process(delta: float) -> void:
 	move_and_slide()
 	_after_slide(pre_slide_velocity)
 	_update_orientation(delta)
+
+
+## Teleports to `xform` (feet origin, Y = up) with zero velocity, e.g. after
+## getting lost in space. Interpolation is reset so the camera can snap too.
+func respawn_at(xform: Transform3D) -> void:
+	global_transform = xform
+	velocity = Vector3.ZERO
+	current_up = xform.basis.y.normalized()
+	up_direction = current_up
+	facing = -xform.basis.z.normalized()
+	_jump_buffer_timer = 0.0
+	_coyote_timer = 0.0
+	reset_physics_interpolation()
+	respawned.emit()
 
 
 func tangential_velocity() -> Vector3:
@@ -106,10 +122,11 @@ func _update_up(delta: float) -> void:
 		target_up = dominant_source.up_at(global_position)
 	else:
 		target_up = gravity_sample.up_or(current_up)
-	if target_up.dot(current_up) < ANTIPARALLEL_DOT:
-		return
 	var sharpness := up_sharpness_ground if on_floor else up_sharpness_air
-	var new_up := current_up.slerp(target_up, 1.0 - exp(-sharpness * delta)).normalized()
+	# A jump straight at a neighbouring planet reverses gravity exactly; the
+	# fallback axis (body right) turns that into a forward flip, not a stall.
+	var right := facing.cross(current_up)
+	var new_up := VectorMath.rotate_toward(current_up, target_up, 1.0 - exp(-sharpness * delta), right)
 	if on_floor:
 		# Parallel-transport the velocity with the frame so walking speed stays
 		# tangent to the curved surface instead of leaking into "vertical".

@@ -1,6 +1,6 @@
-[gd_scene format=3]
+[gd_scene format=3 uid="uid://byvfcpw6kwomn"]
 
-[ext_resource type="Script" path="res://levels/level.gd" id="1_level"]
+[ext_resource type="Script" uid="uid://bbxjpyg3riwg8" path="res://levels/level.gd" id="1_level"]
 [ext_resource type="PackedScene" path="res://world/planet.tscn" id="2_planet"]
 [ext_resource type="PackedScene" path="res://player/player.tscn" id="3_player"]
 [ext_resource type="PackedScene" path="res://camera/camera_rig.tscn" id="4_rig"]
@@ -11,34 +11,34 @@ background_mode = 1
 background_color = Color(0.03, 0.03, 0.08, 1)
 ambient_light_source = 2
 ambient_light_color = Color(0.5, 0.56, 0.78, 1)
-ambient_light_energy = 1.0
 
-[node name="SandboxA" type="Node3D" node_paths=PackedStringArray("player", "camera_rig")]
+[node name="SandboxA" type="Node3D" unique_id=1847680394 node_paths=PackedStringArray("player", "camera_rig")]
 script = ExtResource("1_level")
 level_title = "Sandbox A"
+demo_behavior = 0
 player = NodePath("Player")
 camera_rig = NodePath("CameraRig")
 
-[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=81453088]
 environment = SubResource("Environment_space")
 
-[node name="Sun" type="DirectionalLight3D" parent="."]
+[node name="Sun" type="DirectionalLight3D" parent="." unique_id=1413869865]
 transform = Transform3D(0.866, -0.383, 0.3214, 0, 0.6428, 0.766, -0.5, -0.6634, 0.5567, 0, 0, 0)
 light_energy = 1.2
 shadow_enabled = true
 
-[node name="Fill" type="DirectionalLight3D" parent="."]
+[node name="Fill" type="DirectionalLight3D" parent="." unique_id=1911153184]
 transform = Transform3D(0.866, 0.383, -0.321, 0, -0.643, -0.766, -0.5, 0.663, -0.557, 0, 0, 0)
 light_color = Color(0.55, 0.65, 1, 1)
 light_energy = 0.35
 
-[node name="Planets" type="Node3D" parent="."]
+[node name="Planets" type="Node3D" parent="." unique_id=1602459496]
 
-[node name="Grassy" parent="Planets" instance=ExtResource("2_planet")]
-radius = 10.0
+[node name="Grassy" parent="Planets" unique_id=1122149881 instance=ExtResource("2_planet")]
+collision_mask = 0
 style = ExtResource("5_grass")
 
-[node name="Player" parent="." instance=ExtResource("3_player")]
+[node name="Player" parent="." unique_id=1896306942 instance=ExtResource("3_player")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 10.05, 0)
 
-[node name="CameraRig" parent="." instance=ExtResource("4_rig")]
+[node name="CameraRig" parent="." unique_id=1995543924 instance=ExtResource("4_rig")]

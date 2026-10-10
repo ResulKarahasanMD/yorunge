@@ -22,7 +22,6 @@ extends Node3D
 ## Runs in _process on the player's interpolated pose.
 
 const LOG_TAG := "Camera"
-const ANTIPARALLEL_DOT := -0.999
 ## Auto-align ignores travel that would need a turn larger than this
 ## (running toward the camera should not spin it around).
 const AUTO_ALIGN_MAX_ANGLE := deg_to_rad(120.0)
@@ -255,10 +254,15 @@ func _consume_look(delta: float) -> Vector2:
 
 func _transport_frame(target_up: Vector3, delta: float) -> void:
 	var old_up := _frame.y
-	if target_up.dot(old_up) < ANTIPARALLEL_DOT:
+	# Fallback axis = frame right, so a full gravity flip swings the camera over
+	# the top instead of freezing.
+	var new_up := VectorMath.rotate_toward(old_up, target_up, 1.0 - exp(-up_sharpness * delta), _frame.x)
+	if old_up.is_equal_approx(new_up):
 		return
-	var new_up := old_up.slerp(target_up, 1.0 - exp(-up_sharpness * delta)).normalized()
-	_frame = (Basis(Quaternion(old_up, new_up)) * _frame).orthonormalized()
+	var axis := old_up.cross(new_up)
+	if axis.length_squared() < VectorMath.MIN_LENGTH_SQ:
+		axis = _frame.x
+	_frame = (Basis(axis.normalized(), old_up.angle_to(new_up)) * _frame).orthonormalized()
 
 
 func _auto_align(delta: float) -> void:

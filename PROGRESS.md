@@ -3,9 +3,9 @@
 | Milestone | Tag | Durum | Tarih |
 |---|---|---|---|
 | (0) Kurulum | `m0` | ✅ tamam | 2026-10-10 |
-| (a) Yerçekimi + karakter + kamera | `ma` | 🟡 rev 2 doğrulandı, kullanıcının son onayı bekleniyor | 2026-10-10 |
-| (b) Çoklu gezegen + geçişler | `mb` | ⬜ | |
-| (c) Toz, portal, seviye akışı, düşman, hasar | `mc` | ⬜ | |
+| (a) Yerçekimi + karakter + kamera | `ma` | ✅ kullanıcı onayladı | 2026-10-10 |
+| (b) Çoklu gezegen + geçişler | `mb` | ✅ | 2026-10-10 |
+| (c) Toz, portal, seviye akışı, düşman, hasar | `mc` | ⏳ sürüyor | |
 | (d) Shader ve görsel cila | `md` | ⬜ | |
 | (e) Ses + juice | `me` | ⬜ | |
 | (f) Menüler + kayıt | `mf` | ⬜ | |
@@ -88,11 +88,62 @@ Yeni: `core/frame_capture.gd` (CLI ekran görüntüsü), `Level.input_mode` (NON
 Test toplamı **1540 kontrol, 0 hata**. Headless demo 10 sn: hata 0.
 Beckett MCP oturumu bu revizyon sırasında koptu (Godot 8770'te dinliyor, Claude Code tarafı ECONNREFUSED aldı). Doğrulamalar CLI ile yapıldı.
 
+## (b) Çoklu gezegen + geçişler — 2026-10-10
+### Kod
+- `core/VectorMath.rotate_toward`: zıt vektörlerde (gezegenler arası zıplamada yerçekimi tam tersine döner) yedek eksenle döner. Player up dönüşü ve kamera çerçevesi bunu kullanıyor. Eski kod 180°'de dönüşü atlıyordu; oyuncu kafa üstü inecekti.
+- `gravity/PlanetGraph`: yüzey boşluğu, komşuluk, BFS yol, atlama sayısı. `gravity/JumpReach.MAX_GAP = 9,0` (ölçüldü).
+- `player/RespawnTracker`: güvenli zemin anlık görüntüsünü gezegenin yerel çerçevesinde tutuyor (dönen ayda doğru yer). 3 sn baskın alan yoksa ya da 60 m'den uzaksa `lost_in_space` → `Level` oyuncuyu son güvenli noktaya ışınlıyor.
+- Stiller: `ice.tres` (ivme ×0,35, fren ×0,06 → kaygan), `lava.tres` (`contact_damage = 1`, hasar (c)'de), `moon.tres`.
+- `ai/DemoBot` SEEK davranışı:
+  - Hedef seçimi en ucuz yol (atlama×100 + mesafe).
+  - Aynı gezegende büyük çember boyunca yürür.
+  - Başka gezegene giderken: fırlatma noktasına yürür, 20°'den itibaren yavaşlar, 4°'de ve ≤1,5 m/s'de zıplar; havada hedefe yönelir.
+  - Yalnız gezegen varsa tur atar.
+  - Takılma ve kaçan zıplama sayacı var.
+- `Level`: gezegen grafiği, `planet_of`, `planet_path`, `demo_goals`, `demo_threats`, `demo_behavior` (sandbox_a = GREAT_CIRCLE).
+- `world/space_backdrop.tscn`: paylaşılan ortam (env + güneş + dolgu). `levels/dev/sandbox_b.tscn` = yeni ana sahne (4 gezegen; boşluklar 4 / 3,5 / 6 m; ay 25°/sn dönüyor).
+- `debug/physics_probe.tscn`: headless ölçüm düzeneği (menzil taraması, ay taşıma, yeniden doğma).
+
+### Doğrulama
+- **Menzil (headless, R8 → R6):**
+  - Dikkatli mod (yavaşla, 4°'de zıpla): 2,0–9,0 m arası **12/12** iniş; 10, 11, 12 m'de kaçırıyor.
+  - Özensiz mod (tam hız, 15° önce zıpla): 6–9 m iner, 10 m+ kaçar.
+  - → `MAX_GAP = 9,0 m`. 8 m izi: A'dan çıkışta g = −20,1 (B şimdiden çekiyor), dengeleme noktası A yüzeyinin 4,2 m üstünde. Yukarı vektörü +X'ten B'ye doğru kesintisiz dönüyor.
+- **Dönen ay:** boşta oyuncu 3 sn'de ayın çerçevesine göre 30°/sn'de **0,000 m**, 60°/sn'de **0,002 m** kayıyor; zeminde kalma oranı 1,00. Motorun platform taşıması yeterli, elle taşımaya gerek yok.
+- **Yeniden doğma:** 40 m uzaya ışınlanan oyuncu 3,02 sn'de kayıp sayıldı, son güvenli noktaya **0,000 m** hatayla döndü, zeminde.
+- **Headless demo (sandbox_b, 45 sn):** bağlantılar `Grassy→Icy,Small; Icy→Grassy,Moon; Moon→Icy; Small→Grassy`. İlk 16 sn'de 6/6 zıplama indi. Ay → Küçük için Ay→Buz→Çimen→Küçük yolu bulundu. Hata 0.
+- **Beckett (`demo_entry` → sandbox_b):**
+  - `hops_landed = 6 / hops = 6`, hata/uyarı 0.
+  - `current_up` 40 örnekte sürekli; takla anında 80 ms'de ~30°.
+  - Ekran görüntüsü: fırlatma noktası, hedef gezegen tepede.
+  - 5 sn performans: FPS 120/120/120 (ort/min/p95, 120 Hz ekranda vsync sınırı), draw call ort 35, physics 1,7 ms.
+- **Testler:** 1576 kontrol, 0 hata (+`test_vector_math` 24, `test_planet_graph` 12).
+
+## Çalışma modu (2026-10-10, kullanıcı)
+b→h tek oturumda, onay beklemeden. Her milestone'da şu adımlar:
+1. Testler.
+2. Headless demo.
+3. Beckett doğrulaması (bağlıysa).
+4. Bu dosyaya rapor.
+5. Commit + tag.
+
+Durup sorma koşulları: aynı sorunda 3 başarısız tur, harici asset/eklenti gereksinimi, silme ya da geçmişi yeniden yazma.
+
+## Varsayılan kararlar
+_(kullanıcı sonradan değiştirebilir; her biri gerekçesiyle)_
+- **UI dili Türkçe** (plan varsayılanı, onaylandı).
+- **3 kalp**, kalpler bitince seviye baştan (plan varsayılanı, onaylandı).
+- **Tüm gezegenlerde yerçekimi 24 m/s²**, tam çekim yüzeyden 1,5 m'ye kadar, etki yüzeyden 10 m'ye kadar. Gerekçe: menzil hesabı tek profile dayanıyor; ölçülen menzil 9 m oyuna yetiyor.
+- **Tasarım boşluğu ≤ 7,2 m** (MAX_GAP × 0,8). Tutorial'larda 3–6 m, prosedürel modda derinlikle artarak en fazla 7,2 m. Gerekçe: insan oyuncu bottan özensiz zıplar; özensiz modda da 9 m ölçüldü, %20 pay bırakıldı.
+- **Dönen ay için motorun AnimatableBody3D platform taşıması kullanılıyor** (ölçülen kayma ≤ 0,002 m / 3 sn).
+- **Uzayda kaybolma: 3 sn baskın alan yoksa son güvenli zemine ışınlanma.** Hasar (−1 kalp) (c)'de eklenecek.
+
 ## Ölçümler
 | Milestone | Sahne | FPS ort | FPS min | draw call ort | physics_process ort | Not |
 |---|---|---|---|---|---|---|
 | (a) | sandbox_a (1 gezegen) | 104 | 32 | 22 | 1,5 ms | 6 sn, editöre gömülü; min tek seferlik takılma |
 | (a) rev1 | camera_test (1 gezegen + 4 kaya) | 98 | 72 | 22 | 2,6 ms | 3 sn; boom shape-cast her karede |
+| (b) | sandbox_b (4 gezegen, demo) | 120 | 120 | 35 | 1,7 ms | 5 sn; 120 Hz vsync sınırı |
 
 ## Açık sorunlar / notlar
 - (a) `get_performance_monitors` → `process_time` max 0,75 sn, ort 0,14 sn. FPS ort 104 ile çelişiyor; büyük olasılıkla Beckett örneklemesi/ekran görüntüsü sırasında ana iş parçacığı bekliyor. (d)'de daha kalabalık sahnede yeniden ölçülecek.

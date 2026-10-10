@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="PlanetStyle" format=3]
+
+[ext_resource type="Script" path="res://world/planet_style.gd" id="1_style"]
+
+[resource]
+script = ExtResource("1_style")
+display_name = "Lav"
+surface = 2
+color_low = Color(0.12, 0.05, 0.05, 1)
+color_mid = Color(0.28, 0.08, 0.05, 1)
+color_high = Color(0.45, 0.12, 0.06, 1)
+color_accent = Color(1, 0.45, 0.05, 1)
+atmosphere_color = Color(1, 0.45, 0.2, 1)
+acceleration_multiplier = 1.0
+deceleration_multiplier = 1.0
+contact_damage = 1

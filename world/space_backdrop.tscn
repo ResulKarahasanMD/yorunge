@@ -1,0 +1,24 @@
+[gd_scene format=3]
+
+[sub_resource type="Environment" id="Environment_space"]
+background_mode = 1
+background_color = Color(0.03, 0.03, 0.08, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.5, 0.56, 0.78, 1)
+ambient_light_energy = 1.0
+
+[node name="SpaceBackdrop" type="Node3D"]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_space")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.866, -0.383, 0.3214, 0, 0.6428, 0.766, -0.5, -0.6634, 0.5567, 0, 0, 0)
+light_energy = 1.2
+shadow_enabled = true
+directional_shadow_max_distance = 80.0
+
+[node name="Fill" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.866, 0.383, -0.321, 0, -0.643, -0.766, -0.5, 0.663, -0.557, 0, 0, 0)
+light_color = Color(0.55, 0.65, 1, 1)
+light_energy = 0.35

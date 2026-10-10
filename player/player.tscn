@@ -1,6 +1,7 @@
 [gd_scene format=3]
 
 [ext_resource type="Script" path="res://player/player_controller.gd" id="1_ctrl"]
+[ext_resource type="Script" path="res://player/respawn_tracker.gd" id="2_respawn"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_body"]
 radius = 0.4
@@ -100,3 +101,6 @@ mesh = SubResource("Mesh_antenna")
 [node name="AntennaTip" type="MeshInstance3D" parent="Visual/Head/Antenna"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.2, 0)
 mesh = SubResource("Mesh_tip")
+
+[node name="RespawnTracker" type="Node" parent="."]
+script = ExtResource("2_respawn")
