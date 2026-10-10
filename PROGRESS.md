@@ -11,6 +11,7 @@
 | (f) Menüler + kayıt | `mf` | ✅ | 2026-10-10 |
 | (g) Prosedürel mod | `mg` | ✅ | 2026-10-10 |
 | (h) Uçtan uca DemoBot testi | `mh` | ✅ | 2026-10-10 |
+| (i) Düzeltme turu (kod incelemesi) | `mi` | ⏳ pencereli ölçüm temiz makinede bekliyor | 2026-10-11 |
 
 ## (0) Kurulum — 2026-10-10
 - Git deposu açıldı, tek dal `main`.
@@ -413,6 +414,92 @@ Exit 0, hata 0, uyarı 0. Koşu 218,3 sn; seviye süreleri toplamı 193,91 sn.
 ### Testler
 **1741 kontrol, 0 hata** ((g)'de 1722). `test_leaks` ve yeni lav testleri, gerçek fizik kareleri beklediği için koşu ~10 sn uzadı.
 
+## (i) Düzeltmeler — 2026-10-11
+Çalışma şekli: her hata için önce düzeltmeden kırılan bir regresyon testi, sonra düzeltme, sonra geçen test. Ara çıktılar `out_20261011_mi/` altında (git dışı).
+
+### Hata / sebep / düzeltme / kanıt
+| # | Hata | Sebep | Düzeltme | Kanıt (test; önce → sonra) |
+|---|---|---|---|---|
+| 1 | Seviye sonu / ölüm beklemesinde duraklatınca akış kilitleniyor | `create_timer(delay)` duraklatmada da işliyordu. Süre dolunca `screen != PLAYING` olduğu için geçiş sessizce düşüyordu. | Bekleme oyun zamanında: `create_timer(delay, false)` (`GameMain._level_time`). Gerekçe: portal ve ölüm efektleri de duraklatmada duruyor, değişiklik tek satır, oyuncu Esc'i kaybetmiyor, `resume()`'a ek durum gerekmiyor. Seçilmeyenler: duraklatmayı engellemek (1,2–1,5 sn tepkisiz Esc), `resume()`'da bekleyen geçişi tamamlamak (ikinci kod yolu). | `test_game_flow`: `test_pause_during_level_end_wait_still_shows_summary`, `test_pause_during_death_wait_still_retries`. Önce: 2 kontrol kırık (ekran PLAYING'de kaldı, seviye yeniden başlamadı). Sonra: 0. |
+| 2 | Seed alanına "p" yazılamıyor | `pause` (Esc/P/Start) menülerde "geri" sayılıyordu. `_input` GUI'den önce çalıştığı için P olayı tükeniyordu. | Menüler yalnız `InputBindings.MENU_BACK` (= `ui_cancel`) ile geri gidiyor. `pause` yalnız PLAYING/PAUSED'da. | `test_p_in_seed_field_is_text_not_back`. Önce: ekran MAIN_MENU'ye döndü, metin "". Sonra: ekran ENDLESS_SETUP, metin "p", Esc hâlâ geri götürüyor. |
+| 3 | Menüdeyken kaşif yürüyor, kamera dönüyor | `set_player_control(false)` yalnız işleme bayraklarını kapatıyordu. `PlayerController` ve kamera girdiyi doğrudan `Input`'tan okuyor. | `HumanInput.enabled` + `set_enabled()`: kapalıyken hareket sıfır, zıplama yok. Menüden basılı kalan zıplama bırakılana kadar yok sayılıyor (gamepad A hem onay hem zıplama). `OrbitCameraRig.look_enabled`. | `test_menus_take_devices_away_from_explorer_and_camera`. Önce: 5 kontrol kırık (çubuk basılıyken 0,5 sn'de 6,98 m/s, look ≠ 0, menüden zıplama). Sonra: 0. |
+| 4 | Sonsuz modda her seviye "Yeni rekor!", kayıt sınırsız büyüyor | `record_level` her `endless_<seed>_<derinlik>` için en iyi süre yazıyordu. | Sonsuz seviye `best_times`'a yazılmıyor, yalnız en derin seviye. Yüklemede eski `endless_*` anahtarları siliniyor ve dosya geri yazılıyor (sürüm 1 kaldı). Özet: "Derinlik N · En derin M" (yeni en derinde altın renk). | `test_save`: `test_endless_levels_keep_no_best_times`, `test_old_endless_best_times_are_dropped_on_load`. `test_game_flow`: `test_endless_summary_is_not_a_record`. Önce: 8 kontrol kırık (`best_times` 3 kayıt, `new_record` true). Sonra: 0. Ekran görüntüsü: `menus/level_complete_endless.png`. |
+| 5 | Slider sürüklerken her adımda disk yazımı + pencere modu | `set_setting` her çağrıda `save_to_disk()` ve `window_set_mode()` yapıyordu. | Yalnız değişen ayar uygulanıyor (ses → bus, `fullscreen` → pencere). Disk yazımı 0,5 sn debounce. Ayarlar kapanınca ve çıkışta `flush_settings()`. Pencere modu yalnız tam ekran ↔ değil arasında geçiyor; büyütülmüş pencereye dokunmuyor. | `test_slider_drag_neither_writes_each_step_nor_resets_the_window`. Önce: 21 adımda dosya yeniden yazıldı, 21 pencere modu uygulaması. Sonra: adım başına 0, debounce sonrası 1 yazım, tam ekran anahtarında 1 uygulama. |
+| 6 | Gamepad'de geri tuşu yok | Godot 4.7'de `ui_cancel` yalnız Escape'e, `ui_accept` yalnız Enter/Space'e bağlı. Gamepad'le menüde **onay da** yoktu. | `InputBindings` B'yi `ui_cancel`'a, A'yı `ui_accept`'e ekliyor. Kodla eklenen gamepad olayları her cihazla eşleşiyor (`device = -1`). | `test_gamepad_back_and_confirm`. Önce: 7 kontrol kırık. Sonra: 0 (A Seviyeler'i açıyor; B seviye seçimi / ayarlar / sonsuz kurulumdan geri dönüyor, ayarlardan duraklatmaya dönüyor, duraklatmada devam ettiriyor, oyunda duraklatmıyor). |
+| 7 | Seviye yükleme karesi 20–47 ms | Ölçüldü (aşağıda): gezegen başına 2 küre mesh'i üretilip GPU'ya yükleniyordu; dekorasyon 1–4 ms; ilk seviyede parçacık kurulumu 16 ms. | Paylaşılan birim küre (zemin + atmosfer, örnek ölçeğiyle; `planet_surface` `object_scale` alıyor). Dekor mesh ve malzemeleri önbellekte. Dekorasyon yükleme karesinden sonraki karelerde, kare başına bir gezegen. Diken görselleri paylaşılıyor. `Vfx.prewarm` başlık ekranında. | `test_planets_share_unit_spheres`, `test_decorations_follow_the_load_frame_one_planet_per_frame`, `test_spike_balls_share_visuals`. Yükleme karesi (pencereli) 8,2–57,8 → 6,8–13,2 ms. Görsel: sabit pozlarda en büyük fark 1/255 (gece pozunda 921 600 pikselin 2'si > 8). |
+| 8 | ~1 sn takılmalar, ~32 FPS dönemler | Henüz kanıtlanmadı. Bu turda ölçüm altyapısı eklendi. | `DemoReport`: kare başı pipeline derlemeleri (canvas/mesh/surface/draw/specialization; yüklemede / oyunda), her takılma karesi (≥ 50 ms) derlemesi, odağı, çizilebilirliği ve küçültülmüşlüğüyle; yavaş dönemler (25–50 ms kareler) ve odak dışı payları; `unfocused_s`, `undrawable_s`. | `test_hitches_and_slow_periods`. **Temiz makinede pencereli koşu bekliyor.** Ön bulgu: arka planda başlatılan pencereli koşularda pencere bütün koşu boyunca odak dışıydı (`unfocused_s` ≈ seviye süresi). Örtülü pencere çizmeyi bırakabiliyor; autopilot bu yüzden bir kez asılı kaldı (düzeltildi). |
+| 9 | DemoBot ezme 1/13; E3'te her koşu 1 kaçan zıplama | Ezme: bot topa 2,4 m kala zıplıyordu; iniş topun ötesine düşüyordu. E3: son zıplama doğrudan portala giriyor, seviye inişten önce bitiyordu (**sayım hatası, ne bot ne boşluk**; `validate()` kuralı gerekmiyor). | Ezme: topun devriyesinden tahmini konum (`SpikeBall.predicted_body_position`), yay uzaklığı, temiz alan kontrolü, havada tam hız ayarı, ulaşılamazsa vazgeç ve uzak dur, top yaklaşırken gezegenler arası zıplamayı ertele. E3: portala giren zıplama inmiş sayılıyor. | `test_spike_ball_prediction_matches_its_patrol` (0,8 sn ilerisi < 0,05 m), `test_bot_fall_time_and_surface_offset`, `test_hop_into_the_portal_counts_as_landed` (önce 0/1, sonra 1/1). Tarama (30 seviye): ezme 8/100 → 11/14 (%79 ≥ %50 ✓), hasar 10 → 6 (**hedef 0 ✗**). Headless 3+5: ezme 1/13 → 2/3, hasar 1 → 1, zıplama 36/37 → 37/37. |
+| 10 | Kullanılmayan dosyalar | — | **Silme onayı bekliyor** (aşağıda liste). | `grep`: hiçbirine kod ya da sahne başvurusu yok. |
+| 11 | Tutorial üreticisi depoda yok | Eski bir oturumun scratchpad'inde kalmıştı. | `tools/gen_tutorials.py` (+ `tools/.gdignore`). CLAUDE.md'ye kullanım ve uyarı. | Üç sahne betiğin çıktısıyla bayt düzeyinde aynı (`cmp`). |
+| 12 | Magic number kalıntıları | — | `SpikeBall` görseli, `DemoBot` (zıplama maliyeti, nişan eşiği), `Synth` pad (detune, tremolo), kamera (gezegen içi ufuk, sarsıntı gürültü satırları) `const`. SfxLibrary veri tablosu olarak kaldı: her sayı adlı bir `SynthPatch` alanında, yüz civarında `const` bilgi katmaz. | Pad çıktısı birebir aynı: dikiş adımı 0,00501, p99 0,01102, tepe 0,284. |
+| 13 | BeckettRuntime release'de | — | Değişiklik gerekmiyor. Beckett'in `core/export_filter.gd`'si stub dışındaki tüm Beckett dosyalarını paketten çıkarıyor. Stub export şablonunda (`editor` özelliği yok) boş bir Node. CLAUDE.md'ye yazıldı, ilk export'ta log satırıyla doğrulanacak. `project.godot` değişmedi. | Kaynak: `addons/beckett/core/export_filter.gd`, `runtime/beckett_autoload.gd`. |
+
+### Yan bulgular (düzeltildi)
+- Gamepad A menüde düğmeye basmıyordu (#6 ile birlikte).
+- `endless_probe` ölümde sahneyi sonsuz döngüde yeniden yüklüyordu (`failed`'ı dinleyen yoktu). Artık durup `died=true` diyor.
+- MenuAutopilot `frame_post_draw` beklerken örtülü pencerede asılı kalıyordu. Artık son çizilen kareyi okuyor.
+- Test ortamında autoload'lar yüklü ve `SaveSystem.current` oyuncunun kaydını gösteriyor. GameMain testleri geçici profile geçip geri dönüyor (CLAUDE.md).
+
+### Yükleme karesi (#7) — `debug/load_probe.tscn`, pencereli 1280×720, Unity açıkken
+Aynı 8 seviye (3 tutorial + seed 2026 derinlik 1–5), GameMain üzerinden, oynanış yok.
+
+| Evre (ms) | Önce | Sonra (2 koşu) |
+|---|---|---|
+| Yükleme çağrısı (build + sahneye girme) | 4,3–18,5 | 1,0–6,8 |
+| — build (üretim + LevelBuilder / instantiate) | 0,35–2,07 | 0,32–3,63 |
+| — sahneye girme (`_ready`'ler) | 3,8–14,3 | 0,45–2,74 |
+| — bunun içinde dekorasyon | 0,9–3,6 | 0 (sonraki karelerde, gezegen başına 0,2–1,5) |
+| — ilk seviyede `Vfx.prewarm` | 16,4–16,6 | başlık ekranında |
+| Önceki seviyeyi silme | 0–1,95 | 0,3–1,4 |
+| **Yükleme karesi** | **8,2–57,8** (T1 hariç 8,2–18,0) | **6,8–13,2** |
+
+Gezegen kurulumu dökümü (önce, geçici zamanlamayla): `_build_children` 0,4–3,8, `_apply_radius` 0,7–5,0, `_apply_style` 1,0–4,9 ms. Mikro ölçüm: ağaçtaki bir MeshInstance'a 64×32 küre vermek pencerelide 0,8 ms, headless'ta 0,2 ms. Bu, GPU'ya yükleme maliyeti.
+
+Denenip geri alınan: dekorasyonu tek `multimesh.buffer` atamasıyla yazmak. Pencerelide daha yavaş çıktı (çimen 1,6–1,9 ms; örnek başına çağrılarla 0,7–1,0), çünkü atama yüklemeyi hemen yapıyor.
+
+İlk seviyede hâlâ 12 pipeline derlemesi oluyor (canvas 2, surface 6, specialization 4), ama yükleme karesi 8,3–9,0 ms. Derlemeler ana iş parçacığını bloklamıyor.
+
+### Ezme (#9) — `endless_probe`, 10 seed × derinlik 4/6/8 = 30 seviye, headless
+| Sürüm | Ezme / deneme | Hasar (koşu) | Zıplama | Not |
+|---|---|---|---|---|
+| (h) bot | 8 / 100 | 10 (8) | 187/190 | 2,4 m'de zıpla |
+| v1 tahmini önleme | 49 / 205 | 19 (15) | 198/202 | düzlem izdüşümü, yanlış g |
+| v2 yay + radyal g | 20 / 31 | 6 (6) | 202/206 | |
+| **v3 (benimsendi)** | **11 / 14** | **6 (4)** | 198/202 | temiz alan, yön sınırı, vazgeç/uzak dur, fırlatmayı ertele |
+| v4 merkezcil terim | 11 / 77 | 6 (6) | 200/204 | kapalı form sahte çözümler veriyor |
+| v5 uçuş simülasyonu | — | — | — | ölünce probe döngüye girdi (probe düzeltildi) |
+| v6 top çerçevesinde takip | 7 / 29 | 7 (5) | 200/206 | |
+
+Hasarlı temaslarda ayak topun merkezinin +0,21 m eşiğinin altında kalıyor (−0,41…0,20 m), yatay sapma 0,24–0,92 m. 7–9 m/s inişte temas 1–2 fizik karesi geç algılanıyor. Tolerans dar, tepeye yandan gelen iniş diken sayılıyor. **3 tur kuralı aşıldığı için durduruldu; hasar 0 hedefi açık, kullanıcıya soruldu.** Ezme kuralına (oyun tasarımı) dokunulmadı.
+
+### Testler
+**1824 kontrol, 0 hata** (h: 1741). Yeni: `test_game_flow` (6 test / 30 kontrol). Eklemeler: `test_level_flow` (+2 test), `test_save` (+3), `test_visuals` (+3), `test_report` (+1), `test_hazards` (+2).
+
+### Headless 3 + 5 (son kod)
+`--fixed-fps 60 -- --demo --demo-exit-on-finish --fresh-save --endless-levels=5 --endless-seed=2026`. Exit 0, hata 0, uyarı 0.
+
+| # | Seviye | Süre (h) | Süre (i) | Hasar | Ezme / deneme | Zıplama | Yükleme ms (headless) |
+|---|---|---|---|---|---|---|---|
+| 1 | tutorial_01 | 19,25 | 19,25 | 0 | 0/0 | 2/2 | 4,0 |
+| 2 | tutorial_02 | 16,48 | 16,48 | 0 | 0/0 | 3/3 | 2,9 |
+| 3 | tutorial_03 | 20,55 | 20,50 | 0 | 1/1 | 2/2 | 2,9 |
+| 4 | E1 #1850228613 | 17,27 | 17,27 | 0 | 0/0 | 2/2 | 1,8 |
+| 5 | E2 #1573045651 | 23,02 | 20,95 | 0 | 0/0 | 5/5 | 2,1 |
+| 6 | E3 #1092744277 | 33,17 | 29,97 | 0 | 0/0 | 7/7 | 1,7 |
+| 7 | E4 #441252939 | 22,74 | 18,19 | 1 | 0/1 | 5/5 | 1,9 |
+| 8 | E5 #1670399091 | 41,36 | 42,32 | 0 | 1/1 | 11/11 | 2,2 |
+| | **Toplam** | 193,83 | **184,93** | 1 | 2/3 | 37/37 | |
+
+### Menü ekranları (bot)
+`MenuAutopilot --menu-shots=` ile pencereli koşu: `out_20261011_mi/menus/` (ana menü, seviye seçimi, duraklatma, ayarlar, seviye sonu, sonsuz kurulum, sonsuz özet; ızgara `menus_grid.png`). Seviye seçiminde temiz profilde 2 ve 3 kilitli. Sonsuz özette "Derinlik 1 · En derin 1".
+
+### Silme onayı bekleyenler (#10)
+| Dosya | Gerekçe |
+|---|---|
+| `shaders/debug_checker.gdshader` (+ `.uid`) | (a)'da hız hissi için geçici damaydı. (d)'den beri hiçbir malzeme kullanmıyor. Yalnız PROGRESS.md anıyor. |
+| `node_3d.tscn` | Kökte boş bir Node3D, (b) commit'inde yanlışlıkla izlenmeye girdi. Hiçbir yerden başvuru yok. |
+| `levels/dev/day_test_old_lighting.tscn`, `levels/dev/night_test_old_lighting.tscn` | (a) rev1–2'deki ışık önce/sonra karşılaştırması içindi. Karşılaştırma bitti, sayılar burada kayıtlı. Yalnız PROGRESS.md ve CLAUDE.md anıyor (silinirse CLAUDE.md satırı da güncellenir). |
+
 ## Çalışma modu (2026-10-10, kullanıcı)
 b→h tek oturumda, onay beklemeden. Her milestone'da şu adımlar:
 1. Testler.
@@ -454,6 +541,12 @@ _(kullanıcı sonradan değiştirebilir; her biri gerekçesiyle)_
 - **(h) "3 tutorial + 5 seed" yorumu:** tek bir sonsuz koşu, başlangıç seed'i 2026, derinlik 1–5. Bu 5 farklı türetilmiş seed demek: 1850228613, 1573045651, 1092744277, 441252939, 1670399091; zorluk her seviyede artıyor. Gerekçe: oyuncunun gerçekte oynadığı akış bu (Sonsuz Mod → seed → ardışık seviyeler). Alternatif: derinlik 1'de 5 ayrı başlangıç seed'i.
 - **FPS ölçüsü:** %1 düşük = 1 / p99 kare süresi. Seviye yükleme kareleri (ilk 5) ve ekran görüntüsü kareleri (3) FPS'ten çıkarılıp ayrı sütunda raporlanıyor. Ekran görüntüsü her seviyenin 6. saniyesinde alınıyor.
 - **Portala giren kaşif dokunulmaz:** seviye bittikten sonra lav ya da diken kalp götürmüyor (özet ekranı 1,2 sn sonra geliyor).
+- **(i) Seviye sonu / ölüm beklemesi oyun zamanında:** duraklatınca bekleme de duruyor (#1).
+- **(i) Sonsuz modda en iyi süre yok:** yalnız en derin seviye tutuluyor; özet "Derinlik N · En derin M".
+- **(i) Ayarlar diske 0,5 sn debounce ile yazılıyor;** ekran kapanınca ve çıkışta hemen.
+- **(i) Menüde geri: Esc / gamepad B; onay: Enter / Space / gamepad A. P yalnız oyun içinde duraklatır.**
+- **(i) Dekorasyon yükleme karesinden sonra, kare başına bir gezegen.** Seviye açılırken 3–8 kare (≈ 25–65 ms) içinde beliriyor. Fade eklenmedi, çünkü yükleme karesi zaten 16,7 ms'nin altında.
+- **(i) Ezme kuralı değişmedi** (ayak ≥ 0,35 × yarıçap, yükselme ≤ 0,5 m/s). Hızlı inişte temasın geç algılanması kuralı darlaştırıyor; değiştirmek tasarım kararı, soruldu.
 
 ## Ölçümler
 | Milestone | Sahne | FPS ort | FPS min | draw call ort | physics_process ort | Not |
@@ -469,7 +562,9 @@ _(kullanıcı sonradan değiştirebilir; her biri gerekçesiyle)_
 | (h) | Final: 3 tutorial + 5 sonsuz, bağımsız pencere, 144 Hz | 129,0 | %1 düşük 32,0 (E3) | — | — | 5/8 seviyede %1 düşük ≥ 110; Unity Editor açıkken |
 
 ## Açık sorunlar / notlar
-- Seviye geçişinde (yeni seviye kurulurken) tek karelik takılma var: (h) final koşuda 20–47 ms. Sebep dekorasyon üretimi ve sahne kurulumu. Geçiş zaten bekleme süresine denk geliyor.
+- ~~Seviye geçişinde tek karelik takılma (20–47 ms)~~ → (i)'de 6,8–13,2 ms (pencereli probe). Son doğrulama temiz makinedeki pencereli koşuda.
+- (i) #9: bot hâlâ hasar alabiliyor (30 seviyelik taramada 6, headless 3+5'te 1). Karar bekliyor.
+- (i) #8: ~1 sn takılma ve ~32 FPS dönemlerinin sebebi henüz kanıtlanmadı. Altyapı hazır, temiz makinede pencereli koşu bekliyor.
 - (a) `get_performance_monitors` → `process_time` max 0,75 sn, ort 0,14 sn; bu, FPS ort 104 ile çelişiyordu. Beckett örneklemesi ve ekran görüntüsü sırasında ana iş parçacığı bekliyor. (h)'de FPS oyun içi `DemoReport` ile Beckett'ten bağımsız ölçüldü.
 - Beckett MCP koparsa Claude Code'da `/mcp` ile yeniden bağlanmak gerekiyor; o sürede doğrulama CLI ile yapılıyor (bkz. CLAUDE.md).
 - Beckett `validate_script`, geçici kopyada sınıf adını `__BeckettValidate` yapıyor. Bu yüzden `self`'i tipli parametreye geçiren kod doğrulamadan geçmiyor. Tasarım buna göre: Level, `player.input_source` ve `input.bind(player)` bağlamasını dışarıdan yapıyor.
