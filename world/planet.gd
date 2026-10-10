@@ -10,6 +10,7 @@ extends AnimatableBody3D
 const GROUP := &"planets"
 const MESH_RADIAL_SEGMENTS := 64
 const MESH_RINGS := 32
+const CHECKER_SHADER := preload("res://shaders/debug_checker.gdshader")
 
 @export_range(1.0, 60.0, 0.1, "or_greater") var radius: float = 10.0:
 	set = set_radius
@@ -98,7 +99,10 @@ func _apply_radius() -> void:
 
 
 func _apply_style() -> void:
-	var material := StandardMaterial3D.new()
-	material.albedo_color = style.color_mid if style != null else Color.GRAY
-	material.roughness = 0.85
+	# Temporary checker for a sense of speed; planet_surface.gdshader replaces it in (d).
+	var material := ShaderMaterial.new()
+	material.shader = CHECKER_SHADER
+	if style != null:
+		material.set_shader_parameter(&"color_a", style.color_low)
+		material.set_shader_parameter(&"color_b", style.color_mid)
 	_mesh_instance.material_override = material

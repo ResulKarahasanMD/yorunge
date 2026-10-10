@@ -4,6 +4,7 @@ extends SceneTree
 
 const SUITES: Array[String] = [
 	"res://tests/test_gravity.gd",
+	"res://tests/test_camera.gd",
 ]
 
 
@@ -28,6 +29,7 @@ func _run_all() -> void:
 			suite.begin(method_name)
 			suite.call(method_name)
 			suite.cleanup()
+		suite.teardown_suite()
 		total_checks += suite.checks
 		all_failures.append_array(suite.failures)
 		print("[Test] %s: %d tests, %d checks, %d failures" % [

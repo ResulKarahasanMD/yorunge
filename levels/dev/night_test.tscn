@@ -1,0 +1,9 @@
+[gd_scene format=3]
+
+[ext_resource type="PackedScene" path="res://levels/dev/sandbox_a.tscn" id="1_base"]
+
+[node name="NightTest" instance=ExtResource("1_base")]
+level_title = "Night Side Lighting Test"
+
+[node name="Player" parent="." index="4"]
+transform = Transform3D(1, 0, 0, 0, -0.5, 0.866, 0, -0.866, -0.5, 0, -5.025, -8.703)

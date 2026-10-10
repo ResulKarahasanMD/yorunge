@@ -38,6 +38,11 @@ func spawn(node: Node) -> Node:
 	return node
 
 
+## Called once after the last test of the suite; free suite-owned objects here.
+func teardown_suite() -> void:
+	pass
+
+
 func cleanup() -> void:
 	for child: Node in tree.root.get_children():
 		if child.has_meta(&"test_node"):
