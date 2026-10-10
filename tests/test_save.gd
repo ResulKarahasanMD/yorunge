@@ -65,6 +65,35 @@ func test_progress_and_best_times() -> void:
 	reloaded.free()
 
 
+## Every endless seed is a new level: storing its time made each one a
+## "new record" and grew the save without bound.
+func test_endless_levels_keep_no_best_times() -> void:
+	var save := _fresh()
+	save.record_level(_stats("tutorial_01", 20.0), 0, 0)
+	check(not save.record_level(_stats("endless_11_1", 30.0), -1, 1), "first endless level is not a record")
+	check(not save.record_level(_stats("endless_22_2", 31.0), -1, 2), "second endless level is not a record")
+	check(_best_time_count(save) == 1, "best times hold only the tutorial (%d entries)" % _best_time_count(save))
+	check(save.best_time("endless_11_1") < 0.0, "no best time for an endless level")
+	check(save.endless_best_depth() == 2, "deepest endless level still recorded")
+	save.free()
+
+
+## Saves written before the fix carry endless_* times: dropped on load.
+func test_old_endless_best_times_are_dropped_on_load() -> void:
+	_write(TEST_PATH, "[meta]\nversion=1\n[progress]\nendless_best_depth=3\n" +
+		"best_times={\"tutorial_01\": 20.0, \"endless_5_1\": 12.5, \"endless_9_3\": 40.0}\n")
+	var save := SaveSystem.new()
+	save.use_path(TEST_PATH)
+	check(_best_time_count(save) == 1, "only the tutorial time is left (%d entries)" % _best_time_count(save))
+	check_near(save.best_time("tutorial_01"), 20.0, "tutorial best time kept")
+	check(save.endless_best_depth() == 3, "deepest endless level kept")
+	var reloaded := SaveSystem.new()
+	reloaded.use_path(TEST_PATH)
+	check(_best_time_count(reloaded) == 1, "the cleaned save was written back")
+	save.free()
+	reloaded.free()
+
+
 func test_corrupt_and_old_saves_fall_back_to_defaults() -> void:
 	for content: String in [GARBAGE, "[meta]\nversion=99\n[settings]\nsensitivity=2.5\n"]:
 		_write(TEST_PATH, content)
@@ -80,6 +109,10 @@ func test_corrupt_and_old_saves_fall_back_to_defaults() -> void:
 func teardown_suite() -> void:
 	_remove(TEST_PATH)
 	_remove(TEST_PATH + SaveSystem.BACKUP_SUFFIX)
+
+
+static func _best_time_count(save: SaveSystem) -> int:
+	return (save._config.get_value(SaveSystem.PROGRESS, SaveSystem.BEST_TIMES, {}) as Dictionary).size()
 
 
 func _write(path: String, content: String) -> void:

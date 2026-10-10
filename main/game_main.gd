@@ -54,17 +54,28 @@ func _ready() -> void:
 	show_main_menu()
 
 
+## Runs before the GUI. `pause` (Esc / P / Start) only acts inside a level;
+## menus go back on `menu_back` (Esc / gamepad B) alone, so a "p" typed into
+## the seed field stays text.
 func _input(event: InputEvent) -> void:
-	if not event.is_action_pressed(InputBindings.PAUSE):
+	var pause_pressed := event.is_action_pressed(InputBindings.PAUSE)
+	var back_pressed := event.is_action_pressed(InputBindings.MENU_BACK)
+	if not pause_pressed and not back_pressed:
 		return
 	match screen:
 		Screen.PLAYING:
+			if not pause_pressed:
+				return
 			pause()
 		Screen.PAUSED:
 			resume()
 		Screen.SETTINGS:
+			if not back_pressed:
+				return
 			close_settings()
 		Screen.LEVEL_SELECT, Screen.ENDLESS_SETUP:
+			if not back_pressed:
+				return
 			show_main_menu()
 		_:
 			return
@@ -190,25 +201,37 @@ func _unload_level() -> void:
 
 func _on_level_completed(stats: LevelStats) -> void:
 	stats.deaths = _deaths
-	var best_before := SaveSystem.current.best_time(stats.level_id)
+	var save := SaveSystem.current
 	var endless := GameState.mode == GameStateManager.Mode.ENDLESS
+	var best_before := save.best_time(stats.level_id)
+	var deepest_before := save.endless_best_depth()
 	var tutorial := -1 if endless else GameState.tutorial_index
-	var new_record := SaveSystem.current.record_level(stats, tutorial, GameState.endless_depth if endless else 0)
+	var new_record := save.record_level(stats, tutorial, GameState.endless_depth if endless else 0)
 	GameState.record(stats)
 	var completed_level := level
-	await get_tree().create_timer(complete_screen_delay).timeout
+	await _level_time(complete_screen_delay)
 	if level != completed_level or screen != Screen.PLAYING:
 		return
-	level_complete.show_stats(stats, best_before, new_record, GameState.has_next_level())
+	if endless:
+		level_complete.show_endless_stats(stats, GameState.endless_depth, deepest_before)
+	else:
+		level_complete.show_stats(stats, best_before, new_record, GameState.has_next_level())
 	_set_screen(Screen.LEVEL_COMPLETE, level_complete)
 
 
 func _on_level_failed(_stats: LevelStats) -> void:
 	_deaths += 1
 	var failed_level := level
-	await get_tree().create_timer(retry_delay).timeout
+	await _level_time(retry_delay)
 	if level == failed_level and screen == Screen.PLAYING:
 		_load_current()
+
+
+## Waits in game time: the timer stops while the tree is paused, so a pause
+## during the portal or death wait delays the next screen instead of losing it
+## (a pause-proof timer ran out while paused and the screen check dropped it).
+func _level_time(seconds: float) -> Signal:
+	return get_tree().create_timer(seconds, false).timeout
 
 
 func _finish_run() -> void:

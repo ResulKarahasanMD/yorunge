@@ -9,6 +9,8 @@ const MOVE_LEFT := &"move_left"
 const MOVE_RIGHT := &"move_right"
 const JUMP := &"jump"
 const PAUSE := &"pause"
+## Built-in action; menus go back on it (Esc, plus gamepad B added below).
+const MENU_BACK := &"ui_cancel"
 const LOOK_LEFT := &"look_left"
 const LOOK_RIGHT := &"look_right"
 const LOOK_UP := &"look_up"

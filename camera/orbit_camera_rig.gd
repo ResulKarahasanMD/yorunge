@@ -70,6 +70,8 @@ const SIGHT_SEARCH_STEPS := 10
 ## User setting multiplier (Settings > Sensitivity).
 @export var sensitivity_scale: float = 1.0
 @export var invert_y: bool = false
+## Off while a menu is over the level: mouse and right stick are ignored.
+@export var look_enabled: bool = true
 
 @export_group("Auto align")
 @export var auto_align_delay: float = 1.2
@@ -269,6 +271,9 @@ func _process(delta: float) -> void:
 func _consume_look(delta: float) -> Vector2:
 	var look := _pending_mouse * mouse_radians_per_pixel
 	_pending_mouse = Vector2.ZERO
+	if not look_enabled:
+		_time_since_look += delta
+		return Vector2.ZERO
 	var stick := Input.get_vector(
 		InputBindings.LOOK_LEFT, InputBindings.LOOK_RIGHT,
 		InputBindings.LOOK_UP, InputBindings.LOOK_DOWN)

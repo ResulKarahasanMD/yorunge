@@ -75,11 +75,13 @@ func _process(delta: float) -> void:
 
 
 ## GameMain hands control to the player only while the level is on screen
-## and unpaused (menus must not recapture the mouse or move the explorer).
+## and unpaused: menus must not recapture the mouse, walk the explorer or turn
+## the camera (both read devices directly). The DemoBot keeps driving.
 func set_player_control(enabled: bool) -> void:
 	if input_source is HumanInput:
-		input_source.set_process_unhandled_input(enabled)
-		input_source.set_physics_process(enabled)
+		(input_source as HumanInput).set_enabled(enabled)
+	if camera_rig != null:
+		camera_rig.look_enabled = enabled
 
 
 func is_finished() -> bool:

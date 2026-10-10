@@ -3,6 +3,9 @@ extends RefCounted
 ## Plain description of a generated level (no nodes): what LevelGenerator
 ## produces, LevelBuilder turns into a Level, and tests validate.
 
+## Every generated level id starts with this (SaveSystem keeps them out of best times).
+const ID_PREFIX := "endless_"
+
 class PlanetSpec:
 	var center: Vector3
 	var radius: float
@@ -35,7 +38,7 @@ var spawn: SurfacePoint = null
 
 
 func level_id() -> String:
-	return "endless_%d_%d" % [seed_value, depth]
+	return "%s%d_%d" % [ID_PREFIX, seed_value, depth]
 
 
 func centers() -> PackedVector3Array:

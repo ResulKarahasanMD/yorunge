@@ -75,6 +75,7 @@ func load_from_disk() -> void:
 		_config = ConfigFile.new()
 	else:
 		GameLog.info(LOG_TAG, "loaded %s (sensitivity=%.2f, unlocked=%d)" % [path, get_setting("sensitivity"), unlocked_tutorials()])
+		_drop_endless_best_times()
 	_apply_settings()
 
 
@@ -132,7 +133,15 @@ func endless_best_depth() -> int:
 
 
 ## Records a finished level. Returns true when it set a new best time.
+## Endless levels (endless_depth > 0) only raise the deepest level reached:
+## every seed is a new level, so a best time per level would make each one a
+## "record" and grow the save without bound.
 func record_level(stats: LevelStats, tutorial_index: int, endless_depth: int) -> bool:
+	if endless_depth > 0:
+		if endless_depth > endless_best_depth():
+			_config.set_value(PROGRESS, "endless_best_depth", endless_depth)
+		save_to_disk()
+		return false
 	var times: Dictionary = _config.get_value(PROGRESS, BEST_TIMES, {})
 	var previous := float(times.get(stats.level_id, -1.0))
 	# Compare at the stored precision, or an identical run looks like a record.
@@ -143,7 +152,19 @@ func record_level(stats: LevelStats, tutorial_index: int, endless_depth: int) ->
 		_config.set_value(PROGRESS, BEST_TIMES, times)
 	if tutorial_index >= 0:
 		_config.set_value(PROGRESS, "unlocked_tutorials", maxi(unlocked_tutorials(), tutorial_index + 2))
-	if endless_depth > endless_best_depth():
-		_config.set_value(PROGRESS, "endless_best_depth", endless_depth)
 	save_to_disk()
 	return improved
+
+
+## Saves from before endless levels were kept out of the best times still
+## carry one entry per endless level played: drop them and write back.
+func _drop_endless_best_times() -> void:
+	var times: Dictionary = _config.get_value(PROGRESS, BEST_TIMES, {})
+	var stale := times.keys().filter(func(id: Variant) -> bool: return String(id).begins_with(LevelSpec.ID_PREFIX))
+	if stale.is_empty():
+		return
+	for id: Variant in stale:
+		times.erase(id)
+	_config.set_value(PROGRESS, BEST_TIMES, times)
+	GameLog.info(LOG_TAG, "dropped %d endless best times from %s" % [stale.size(), path])
+	save_to_disk()
