@@ -1,0 +1,41 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://world/exit_portal.gd" id="1_portal"]
+
+[sub_resource type="SphereShape3D" id="SphereShape3D_portal"]
+radius = 1.15
+
+[sub_resource type="StandardMaterial3D" id="Mat_ring"]
+albedo_color = Color(0.62, 0.5, 0.95, 1)
+metallic = 0.5
+roughness = 0.3
+
+[sub_resource type="TorusMesh" id="TorusMesh_ring"]
+material = SubResource("Mat_ring")
+inner_radius = 1.0
+outer_radius = 1.28
+rings = 48
+ring_segments = 12
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_disc"]
+top_radius = 1.0
+bottom_radius = 1.0
+height = 0.04
+radial_segments = 48
+rings = 1
+
+[node name="ExitPortal" type="Area3D"]
+script = ExtResource("1_portal")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+shape = SubResource("SphereShape3D_portal")
+
+[node name="Visual" type="Node3D" parent="."]
+
+[node name="Ring" type="MeshInstance3D" parent="Visual"]
+transform = Transform3D(1, 0, 0, 0, 0, -1, 0, 1, 0, 0, 0, 0)
+mesh = SubResource("TorusMesh_ring")
+
+[node name="Disc" type="MeshInstance3D" parent="Visual"]
+transform = Transform3D(1, 0, 0, 0, 0, -1, 0, 1, 0, 0, 0, 0)
+mesh = SubResource("CylinderMesh_disc")

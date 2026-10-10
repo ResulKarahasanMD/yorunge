@@ -5,8 +5,8 @@
 | (0) Kurulum | `m0` | ✅ tamam | 2026-10-10 |
 | (a) Yerçekimi + karakter + kamera | `ma` | ✅ kullanıcı onayladı | 2026-10-10 |
 | (b) Çoklu gezegen + geçişler | `mb` | ✅ | 2026-10-10 |
-| (c) Toz, portal, seviye akışı, düşman, hasar | `mc` | ⏳ sürüyor | |
-| (d) Shader ve görsel cila | `md` | ⬜ | |
+| (c) Toz, portal, seviye akışı, düşman, hasar | `mc` | ✅ | 2026-10-10 |
+| (d) Shader ve görsel cila | `md` | ⏳ sürüyor | |
 | (e) Ses + juice | `me` | ⬜ | |
 | (f) Menüler + kayıt | `mf` | ⬜ | |
 | (g) Prosedürel mod | `mg` | ⬜ | |
@@ -119,6 +119,58 @@ Beckett MCP oturumu bu revizyon sırasında koptu (Godot 8770'te dinliyor, Claud
   - 5 sn performans: FPS 120/120/120 (ort/min/p95, 120 Hz ekranda vsync sınırı), draw call ort 35, physics 1,7 ms.
 - **Testler:** 1576 kontrol, 0 hata (+`test_vector_math` 24, `test_planet_graph` 12).
 
+## (c) Toz, portal, seviye akışı, düşman, hasar — 2026-10-10
+### Kod
+- `world/`:
+  - `SurfaceAnchor`: gezegen altındaki nesneyi yönü korunarak verilen yüksekliğe oturtur.
+  - `Stardust` (Area3D, sallanır ve döner).
+  - `ExitPortal` (uyuyan/aktif, halka döner).
+  - `SpikeBall`: gezegen merkezinde döner, gövde yüzeyde. Dikenler ikosahedron yönlerinde koni. Ezme kuralı saf `is_stomp()`.
+- `player/`:
+  - `PlayerHealth`: 3 kalp, 1,5 sn dokunulmazlık, `died`.
+  - `PlayerVisual`: dokunulmazken yanıp söner.
+  - Controller'a `heat` (lav), `bounce()`, `take_hit()` (geri itme) eklendi.
+- `levels/`:
+  - `Level`: toz → portal → `completed(LevelStats)`. Ölümde `failed`; dinleyen yoksa sahne yeniden yüklenir. Uzayda kaybolma −1 kalp. DemoBot'a hedef ve tehdit listeleri.
+  - `LevelStats`, `TutorialHint` (Resource) + `TutorialHints`: tetikleyiciler hatırlanır, her ipucu en az 3,5 sn ekranda kalır.
+- `main/`: `GameMain` + `main.tscn` (yeni ana sahne). Seviyeyi `LevelHost` altına yükler, HUD'u bağlar, tutorial'ları sırayla oynatır, ölümde tekrar dener, demo modunda bitince çıkar.
+- `ui/`:
+  - `Hud`: yıldız sayacı, kalpler, başlık, ipucu paneli, bildirim yazısı, "pop" tween'i.
+  - `HeartIcon` ve `StardustIcon`: parametrik eğri / poligon çizimi, asset yok.
+  - `UiText`: tüm arayüz metinleri.
+- `autoload/GameState`: tutorial listesi, ilerleme, geçmiş.
+- `ai/DemoBot`:
+  - Lavda ısı 0,4'ü geçince zıplar.
+  - Yanan zeminden 8° içinde özensiz fırlatma yapar.
+  - Önündeki düşmana zıplar ve havada üstüne yönelir.
+- Tutorial seviyeleri (`levels/tutorial_0{1,2,3}.tscn`): tasarım bir Python betiğinden üretildi, boşluklar kontrol edildi (bağlı 3,5–5 m, bağlı olmayan ≥ 11 m).
+  - **T1 İlk Adımlar:** Meadow R10 + Pebble R5.
+  - **T2 Sıçrayış:** çimen R8 → buz R7 → çimen R6 → kaya R5.
+  - **T3 Tehlike:** çimen R9 (1 diken) → lav R7 → dönen ay R4 (30°/sn) → çimen R7 (2 diken + portal).
+
+### Doğrulama
+- **Headless demo** (`main.tscn`, `--demo --demo-exit-on-finish`, sabit 60 FPS):
+
+| Seviye | Süre | Hasar | Ölüm | Toz |
+|---|---|---|---|---|
+| T1 İlk Adımlar | 20,22 sn | 0 | 0 | 5/5 |
+| T2 Sıçrayış | 16,47 sn | 0 | 0 | 5/5 |
+| T3 Tehlike | 43,15 sn | 0 | 0 | 5/5 |
+
+  Hata 0, kaçan zıplama 0, atlanan hedef 0. İpuçları sırayla geldi.
+- **Mekanikler** (`physics_probe`; bot bu koşuda düşmanlarla hiç karşılaşmadığı için ayrıca ölçüldü):
+  - Üstten düşme → top **yenildi**, hasar 0, sıçrama var.
+  - Yandan çarpma → **hasar 1**, geri itme var, top sağ.
+  - Lavda 4 sn boşta durma → **2 hasar**, 3 sıcak ayak sıçraması, en yüksek ısı 0,98.
+  - Lavda zıplayarak gezme → **0 hasar**, en yüksek ısı 0,37.
+  - Uzayda kaybolma → −1 kalp + yeniden doğma.
+- **Beckett:**
+  - `ui_snapshot`: HUD "1 / 5", 3 kalp, başlık "1 · İlk Adımlar", ipucu "Hoş geldin, kaşif! …". **Türkçe karakterler (İ ş ç ü ı) varsayılan fontta doğru.**
+  - T1, T2 (buz) ve T3 (lav) ekran görüntüleri alındı.
+  - Kalp simgeleri satır yüksekliğine gerilip uzuyordu (30×54) → `SIZE_SHRINK_CENTER` ile düzeltildi.
+  - 5 sn performans (T3): FPS 120/120/120, draw call ort 71, physics 1,3 ms. Uyarı 0.
+- **Testler:** **1602 kontrol, 0 hata** (+`test_hazards` 15, `test_level_flow` 11).
+
 ## Çalışma modu (2026-10-10, kullanıcı)
 b→h tek oturumda, onay beklemeden. Her milestone'da şu adımlar:
 1. Testler.
@@ -136,7 +188,12 @@ _(kullanıcı sonradan değiştirebilir; her biri gerekçesiyle)_
 - **Tüm gezegenlerde yerçekimi 24 m/s²**, tam çekim yüzeyden 1,5 m'ye kadar, etki yüzeyden 10 m'ye kadar. Gerekçe: menzil hesabı tek profile dayanıyor; ölçülen menzil 9 m oyuna yetiyor.
 - **Tasarım boşluğu ≤ 7,2 m** (MAX_GAP × 0,8). Tutorial'larda 3–6 m, prosedürel modda derinlikle artarak en fazla 7,2 m. Gerekçe: insan oyuncu bottan özensiz zıplar; özensiz modda da 9 m ölçüldü, %20 pay bırakıldı.
 - **Dönen ay için motorun AnimatableBody3D platform taşıması kullanılıyor** (ölçülen kayma ≤ 0,002 m / 3 sn).
-- **Uzayda kaybolma: 3 sn baskın alan yoksa son güvenli zemine ışınlanma.** Hasar (−1 kalp) (c)'de eklenecek.
+- **Uzayda kaybolma: 3 sn baskın alan yoksa son güvenli zemine ışınlanma, −1 kalp.**
+- **Lav = ısı birikimi, her temasta hasar değil.** Lavda kesintisiz 0,8 sn → 1 hasar + sıcak ayak sıçraması; havada 1 sn'de soğur. Gerekçe: bütün yüzey lav olduğundan "her temas 1 kalp" 3–4 sn'de ölüm demekti. Zıplayarak geçmek beceri haline geliyor (ölçüm: zıplayan 0 hasar, boşta duran 4 sn'de 2 hasar).
+- **Dikenli küre: üstten ezme ≥ 0,35 × yarıçap yükseklik ve ≤ 0,5 m/s yükselme.** Yandan temas 1 hasar + geri itme (6 m/s yatay, 5 m/s dikey). Devriye hızı 16–20°/sn.
+- **İpucu metinleri seviye sahnelerinde** (`TutorialHint` kaynakları). Arayüz metinleri `ui/ui_text.gd`'de. Gerekçe: ipuçları seviye içeriği.
+- **Seviye bitince 2,5 sn sonra sıradaki tutorial, ölümde 1,5 sn sonra tekrar.** (f)'de seviye sonu ekranı araya girecek.
+- **Kalp ve yıldız simgeleri kodla çiziliyor** (harici asset yok).
 
 ## Ölçümler
 | Milestone | Sahne | FPS ort | FPS min | draw call ort | physics_process ort | Not |
@@ -144,6 +201,7 @@ _(kullanıcı sonradan değiştirebilir; her biri gerekçesiyle)_
 | (a) | sandbox_a (1 gezegen) | 104 | 32 | 22 | 1,5 ms | 6 sn, editöre gömülü; min tek seferlik takılma |
 | (a) rev1 | camera_test (1 gezegen + 4 kaya) | 98 | 72 | 22 | 2,6 ms | 3 sn; boom shape-cast her karede |
 | (b) | sandbox_b (4 gezegen, demo) | 120 | 120 | 35 | 1,7 ms | 5 sn; 120 Hz vsync sınırı |
+| (c) | tutorial_03 (4 gezegen, 3 düşman, demo) | 120 | 120 | 71 | 1,3 ms | 5 sn |
 
 ## Açık sorunlar / notlar
 - (a) `get_performance_monitors` → `process_time` max 0,75 sn, ort 0,14 sn. FPS ort 104 ile çelişiyor; büyük olasılıkla Beckett örneklemesi/ekran görüntüsü sırasında ana iş parçacığı bekliyor. (d)'de daha kalabalık sahnede yeniden ölçülecek.

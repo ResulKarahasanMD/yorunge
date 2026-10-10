@@ -1,16 +1,26 @@
 class_name Level
 extends Node3D
 ## Base for every playable level (hand-made tutorials and generated ones).
-## Wires the player, camera and input strategy, keeps the jump graph of the
-## level's planets, answers the DemoBot's questions (goals, threats, paths)
-## and respawns a player lost in space. Stardust/portal flow arrives in (c).
+## Wires the player, camera and input strategy; tracks stardust, the exit
+## portal and enemies; reports completion/failure with LevelStats; keeps the
+## jump graph of its planets and answers the DemoBot (goals, threats, paths).
+## When nobody listens to `failed` (a dev scene played on its own) a death
+## reloads the scene directly.
+
+signal stardust_changed(collected: int, total: int)
+signal portal_opened
+signal enemy_defeated
+signal completed(stats: LevelStats)
+signal failed(stats: LevelStats)
 
 ## AUTO: DemoBot when DemoMode is active, HumanInput otherwise.
 ## NONE: nobody drives the player (fixed-pose test scenes; keeps the mouse free).
 enum InputMode { AUTO, HUMAN, DEMO, NONE }
 
 const LOG_TAG := "Level"
+const LOST_IN_SPACE_DAMAGE := 1
 
+@export var level_id: String = ""
 @export var level_title: String = ""
 @export var player: PlayerController
 @export var camera_rig: OrbitCameraRig
@@ -18,19 +28,46 @@ const LOG_TAG := "Level"
 @export var demo_behavior: DemoBot.Behavior = DemoBot.Behavior.SEEK
 
 var input_source: PlayerInput = null
+var stats: LevelStats = LevelStats.new()
+var portal: ExitPortal = null
+var hints: TutorialHints = null
+var elapsed: float = 0.0
 
 var _planets: Array[Planet] = []
 var _links: Array[PackedInt32Array] = []
+var _stardust: Array[Stardust] = []
+var _enemies: Array[SpikeBall] = []
+var _finished: bool = false
 
 
 func _ready() -> void:
 	_collect_planets()
+	_collect_objectives()
 	camera_rig.set_target(player)
 	_install_input()
 	player.respawn_tracker.lost_in_space.connect(_on_player_lost)
-	GameLog.info(LOG_TAG, "ready: %s (input=%s, planets=%d, links=%s)" % [
+	player.health.died.connect(_on_player_died)
+	stats.level_id = level_id
+	stats.title = level_title
+	stats.total = _stardust.size()
+	for child: Node in get_children():
+		if child is TutorialHints:
+			hints = child as TutorialHints
+			hints.setup(self)
+	if _stardust.is_empty() and portal != null:
+		_open_portal()
+	GameLog.info(LOG_TAG, "ready: %s (input=%s, planets=%d, stardust=%d, enemies=%d, links=%s)" % [
 		level_title, input_source.name if input_source != null else "none",
-		_planets.size(), _describe_links()])
+		_planets.size(), _stardust.size(), _enemies.size(), _describe_links()])
+
+
+func _process(delta: float) -> void:
+	if not _finished:
+		elapsed += delta
+
+
+func is_finished() -> bool:
+	return _finished
 
 
 func planets() -> Array[Planet]:
@@ -68,22 +105,37 @@ func planet_path(from: Planet, to: Planet) -> Array[Planet]:
 	return route
 
 
-## What the DemoBot should go for, nearest first. Without pickups the planets
-## themselves are the goals (planet tour).
+## What the DemoBot should go for: remaining stardust, then the open portal.
+## A level without objectives offers its planets (planet tour).
 func demo_goals() -> Array[Node3D]:
 	var goals: Array[Node3D] = []
-	for planet: Planet in _planets:
-		goals.append(planet)
+	for stardust: Stardust in _stardust:
+		goals.append(stardust)
+	if goals.is_empty() and portal != null and portal.is_active:
+		goals.append(portal)
+	if goals.is_empty() and portal == null:
+		for planet: Planet in _planets:
+			goals.append(planet)
 	return goals
 
 
 func is_goal_active(node: Node3D) -> bool:
-	return is_instance_valid(node)
+	if not is_instance_valid(node):
+		return false
+	if node is Stardust:
+		return not (node as Stardust).is_collected
+	if node is ExitPortal:
+		return (node as ExitPortal).is_active
+	return true
 
 
-## Hazards the DemoBot should jump over or onto.
+## Enemy bodies the DemoBot should jump onto or over.
 func demo_threats() -> Array[Node3D]:
-	return []
+	var threats: Array[Node3D] = []
+	for enemy: SpikeBall in _enemies:
+		if is_instance_valid(enemy) and not enemy.is_defeated:
+			threats.append(enemy.body)
+	return threats
 
 
 func _collect_planets() -> void:
@@ -97,6 +149,23 @@ func _collect_planets() -> void:
 			centers.append(planet.global_position)
 			radii.append(planet.radius)
 	_links = PlanetGraph.build(centers, radii, JumpReach.MAX_GAP)
+
+
+func _collect_objectives() -> void:
+	for node: Node in get_tree().get_nodes_in_group(Stardust.GROUP):
+		if is_ancestor_of(node):
+			var stardust := node as Stardust
+			_stardust.append(stardust)
+			stardust.collected.connect(_on_stardust_collected)
+	for node: Node in get_tree().get_nodes_in_group(ExitPortal.GROUP):
+		if is_ancestor_of(node) and portal == null:
+			portal = node as ExitPortal
+			portal.entered.connect(_on_portal_entered)
+	for node: Node in get_tree().get_nodes_in_group(SpikeBall.GROUP):
+		if is_ancestor_of(node):
+			var enemy := node as SpikeBall
+			_enemies.append(enemy)
+			enemy.defeated.connect(_on_enemy_defeated)
 
 
 func _install_input() -> void:
@@ -122,9 +191,59 @@ func _install_input() -> void:
 	input_source.bind(player)
 
 
+func _on_stardust_collected(stardust: Stardust) -> void:
+	_stardust.erase(stardust)
+	stats.collected += 1
+	GameLog.info(LOG_TAG, "stardust %d/%d" % [stats.collected, stats.total])
+	stardust_changed.emit(stats.collected, stats.total)
+	if _stardust.is_empty() and portal != null:
+		_open_portal()
+
+
+func _open_portal() -> void:
+	portal.activate()
+	portal_opened.emit()
+
+
+func _on_enemy_defeated(enemy: SpikeBall) -> void:
+	_enemies.erase(enemy)
+	stats.stomps += 1
+	enemy_defeated.emit()
+
+
+func _on_portal_entered() -> void:
+	if _finished:
+		return
+	_finished = true
+	_fill_stats(true)
+	GameLog.info(LOG_TAG, "completed %s: %s" % [level_id, stats.to_dict()])
+	completed.emit(stats)
+
+
 func _on_player_lost() -> void:
+	player.health.take_damage(LOST_IN_SPACE_DAMAGE, "lost in space")
+	if player.health.is_dead():
+		return
 	player.respawn_at(player.respawn_tracker.safe_transform())
 	camera_rig.snap_to_target()
+
+
+func _on_player_died() -> void:
+	if _finished:
+		return
+	_finished = true
+	_fill_stats(false)
+	GameLog.info(LOG_TAG, "failed %s: %s" % [level_id, stats.to_dict()])
+	if failed.get_connections().is_empty():
+		get_tree().reload_current_scene.call_deferred()
+	else:
+		failed.emit(stats)
+
+
+func _fill_stats(success: bool) -> void:
+	stats.completed = success
+	stats.time = elapsed
+	stats.damage = player.health.damage_taken
 
 
 func _describe_links() -> String:

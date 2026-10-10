@@ -1,0 +1,93 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://levels/level.gd" id="1_r"]
+[ext_resource type="PackedScene" path="res://world/planet.tscn" id="2_r"]
+[ext_resource type="PackedScene" path="res://player/player.tscn" id="3_r"]
+[ext_resource type="PackedScene" path="res://camera/camera_rig.tscn" id="4_r"]
+[ext_resource type="PackedScene" path="res://world/space_backdrop.tscn" id="5_r"]
+[ext_resource type="PackedScene" path="res://world/stardust.tscn" id="6_r"]
+[ext_resource type="PackedScene" path="res://world/exit_portal.tscn" id="7_r"]
+[ext_resource type="PackedScene" path="res://world/spike_ball.tscn" id="8_r"]
+[ext_resource type="Script" path="res://levels/tutorial_hints.gd" id="9_r"]
+[ext_resource type="Script" path="res://levels/tutorial_hint.gd" id="10_r"]
+[ext_resource type="Resource" path="res://world/styles/grass.tres" id="11_r"]
+[ext_resource type="Resource" path="res://world/styles/ice.tres" id="12_r"]
+[ext_resource type="Resource" path="res://world/styles/moon.tres" id="13_r"]
+
+[sub_resource type="Resource" id="Hint_0"]
+script = ExtResource("10_r")
+text = "Komşu gezegene en yakın noktaya yürü ve zıpla: çekim seni karşıya taşır."
+trigger = 0
+
+[sub_resource type="Resource" id="Hint_1"]
+script = ExtResource("10_r")
+text = "Buz kaygandır! Erken fren yap, dikkatli dön."
+trigger = 3
+
+[sub_resource type="Resource" id="Hint_2"]
+script = ExtResource("10_r")
+text = "Her gezegende yıldız tozu var; hepsini topla."
+trigger = 4
+
+[sub_resource type="Resource" id="Hint_3"]
+script = ExtResource("10_r")
+text = "Portal açıldı! En uzaktaki kayalık gezegende."
+trigger = 5
+
+[node name="Tutorial02" type="Node3D" node_paths=PackedStringArray("player", "camera_rig")]
+script = ExtResource("1_r")
+level_id = "tutorial_02"
+level_title = "2 · Sıçrayış"
+player = NodePath("Player")
+camera_rig = NodePath("CameraRig")
+
+[node name="SpaceBackdrop" parent="." instance=ExtResource("5_r")]
+
+[node name="Planets" type="Node3D" parent="."]
+
+[node name="Home" parent="Planets" instance=ExtResource("2_r")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
+radius = 8.0
+style = ExtResource("11_r")
+
+[node name="Frost" parent="Planets" instance=ExtResource("2_r")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 19, 0, 0)
+radius = 7.0
+style = ExtResource("12_r")
+
+[node name="Grove" parent="Planets" instance=ExtResource("2_r")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 25.33, 2.712, -16.63)
+radius = 6.0
+style = ExtResource("11_r")
+
+[node name="Crag" parent="Planets" instance=ExtResource("2_r")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 16.75, 8.171, -28.33)
+radius = 5.0
+style = ExtResource("13_r")
+
+[node name="Stardust1" parent="Planets/Home" instance=ExtResource("6_r")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.3714, -0.9285)
+
+[node name="Stardust2" parent="Planets/Frost" instance=ExtResource("6_r")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.2683, 0.8944, 0.3578)
+
+[node name="Stardust3" parent="Planets/Frost" instance=ExtResource("6_r")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.3885, -0.8742, -0.2914)
+
+[node name="Stardust4" parent="Planets/Grove" instance=ExtResource("6_r")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9806, 0.1961)
+
+[node name="Stardust5" parent="Planets/Crag" instance=ExtResource("6_r")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.303, 0.8081, -0.5051)
+
+[node name="ExitPortal" parent="Planets/Crag" instance=ExtResource("7_r")]
+transform = Transform3D(6.939e-18, -0.1881, -0.9821, 0.9578, -0.2822, 0.05406, -0.2873, -0.9407, 0.1802, -0.1881, -0.2822, -0.9407)
+
+[node name="Player" parent="." instance=ExtResource("3_r")]
+transform = Transform3D(1, 0, -0, -0, 1, -0, 0, 0, 1, 0, 8.05, 0)
+
+[node name="CameraRig" parent="." instance=ExtResource("4_r")]
+
+[node name="Hints" type="Node" parent="."]
+script = ExtResource("9_r")
+hints = [SubResource("Hint_0"), SubResource("Hint_1"), SubResource("Hint_2"), SubResource("Hint_3")]

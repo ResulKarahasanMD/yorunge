@@ -10,6 +10,8 @@ signal jumped
 signal landed(impact_speed: float)
 signal dominant_source_changed(source: GravitySource)
 signal respawned
+## Hazard / enemy bounce (hot foot, stomp, knockback) — juice hooks in (e).
+signal bounced
 
 const LOG_TAG := "Player"
 const GRAVITY_LOG_TAG := "Gravity"
@@ -39,6 +41,15 @@ const MIN_LENGTH_SQ := 0.000001
 @export var floor_snap: float = 0.4
 @export var floor_max_angle_deg: float = 50.0
 
+@export_group("Hazards")
+## Seconds of continuous contact with a burning surface before it hurts.
+@export var burn_time: float = 0.8
+## Seconds off the hot surface to cool from full heat to zero.
+@export var cool_time: float = 1.0
+@export var hot_foot_speed: float = 8.0
+@export var knockback_speed: float = 6.0
+@export var knockback_lift: float = 5.0
+
 ## Assigned by Level together with PlayerInput.bind(); never self-assigned.
 var input_source: PlayerInput = null
 ## Smoothed local "up"; mirrored into CharacterBody3D.up_direction.
@@ -51,7 +62,11 @@ var surface_altitude: float = 0.0
 ## Planet under the player, or null while drifting through free space.
 var current_planet: Planet = null
 
+## 0..1; reaching 1 on a burning surface costs a heart and bounces the player.
+var heat: float = 0.0
+
 @onready var respawn_tracker: RespawnTracker = $RespawnTracker
+@onready var health: PlayerHealth = $PlayerHealth
 
 var _coyote_timer: float = 0.0
 var _jump_buffer_timer: float = 0.0
@@ -78,6 +93,7 @@ func _physics_process(delta: float) -> void:
 	var pre_slide_velocity := velocity
 	move_and_slide()
 	_after_slide(pre_slide_velocity)
+	_update_heat(delta)
 	_update_orientation(delta)
 
 
@@ -93,6 +109,26 @@ func respawn_at(xform: Transform3D) -> void:
 	_coyote_timer = 0.0
 	reset_physics_interpolation()
 	respawned.emit()
+
+
+## Replaces the vertical speed with `speed` along local up (stomp, hot foot).
+func bounce(speed: float) -> void:
+	velocity = tangential_velocity() + current_up * speed
+	_jump_cut_done = true
+	_coyote_timer = 0.0
+	bounced.emit()
+
+
+## Damage from something at `source` (enemy): lose hearts and get knocked away.
+func take_hit(damage: int, source: Vector3, cause: String) -> void:
+	if not health.take_damage(damage, cause):
+		return
+	var away := VectorMath.flatten(global_position - source, current_up)
+	if away.length_squared() < MIN_LENGTH_SQ:
+		away = -facing
+	velocity = away.normalized() * knockback_speed + current_up * knockback_lift
+	_jump_cut_done = true
+	bounced.emit()
 
 
 func tangential_velocity() -> Vector3:
@@ -197,6 +233,20 @@ func _after_slide(pre_slide_velocity: Vector3) -> void:
 	if on_floor and not _was_on_floor:
 		landed.emit(maxf(0.0, -pre_slide_velocity.dot(current_up)))
 	_was_on_floor = on_floor
+
+
+func _update_heat(delta: float) -> void:
+	var damage := 0
+	if is_on_floor() and current_planet != null and current_planet.style != null:
+		damage = current_planet.style.contact_damage
+	if damage <= 0:
+		heat = maxf(0.0, heat - delta / cool_time)
+		return
+	heat += delta / burn_time
+	if heat >= 1.0:
+		heat = 0.0
+		health.take_damage(damage, "lava")
+		bounce(hot_foot_speed)
 
 
 func _update_orientation(delta: float) -> void:

@@ -1,0 +1,86 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://levels/level.gd" id="1_r"]
+[ext_resource type="PackedScene" path="res://world/planet.tscn" id="2_r"]
+[ext_resource type="PackedScene" path="res://player/player.tscn" id="3_r"]
+[ext_resource type="PackedScene" path="res://camera/camera_rig.tscn" id="4_r"]
+[ext_resource type="PackedScene" path="res://world/space_backdrop.tscn" id="5_r"]
+[ext_resource type="PackedScene" path="res://world/stardust.tscn" id="6_r"]
+[ext_resource type="PackedScene" path="res://world/exit_portal.tscn" id="7_r"]
+[ext_resource type="PackedScene" path="res://world/spike_ball.tscn" id="8_r"]
+[ext_resource type="Script" path="res://levels/tutorial_hints.gd" id="9_r"]
+[ext_resource type="Script" path="res://levels/tutorial_hint.gd" id="10_r"]
+[ext_resource type="Resource" path="res://world/styles/grass.tres" id="11_r"]
+
+[sub_resource type="Resource" id="Hint_0"]
+script = ExtResource("10_r")
+text = "Hoş geldin, kaşif! WASD / sol çubuk ile yürü, fareyle etrafına bak."
+trigger = 0
+
+[sub_resource type="Resource" id="Hint_1"]
+script = ExtResource("10_r")
+text = "Gezegenin her yanı yürünebilir; aşağısı hep merkez. Space / A ile zıpla."
+trigger = 1
+
+[sub_resource type="Resource" id="Hint_2"]
+script = ExtResource("10_r")
+text = "5 yıldız tozunu topla. Biri komşu küçük gezegende!"
+trigger = 2
+
+[sub_resource type="Resource" id="Hint_3"]
+script = ExtResource("10_r")
+text = "Zıpladığında en güçlü çekim seni yakalar."
+trigger = 3
+
+[sub_resource type="Resource" id="Hint_4"]
+script = ExtResource("10_r")
+text = "Portal açıldı! Parlayan halkaya gir."
+trigger = 5
+
+[node name="Tutorial01" type="Node3D" node_paths=PackedStringArray("player", "camera_rig")]
+script = ExtResource("1_r")
+level_id = "tutorial_01"
+level_title = "1 · İlk Adımlar"
+player = NodePath("Player")
+camera_rig = NodePath("CameraRig")
+
+[node name="SpaceBackdrop" parent="." instance=ExtResource("5_r")]
+
+[node name="Planets" type="Node3D" parent="."]
+
+[node name="Meadow" parent="Planets" instance=ExtResource("2_r")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
+radius = 10.0
+style = ExtResource("11_r")
+
+[node name="Pebble" parent="Planets" instance=ExtResource("2_r")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 13.88, 6.48, -10.37)
+radius = 5.0
+style = ExtResource("11_r")
+
+[node name="Stardust1" parent="Planets/Meadow" instance=ExtResource("6_r")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.4819, -0.8762)
+
+[node name="Stardust2" parent="Planets/Meadow" instance=ExtResource("6_r")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.96, 0.144, 0.24)
+
+[node name="Stardust3" parent="Planets/Meadow" instance=ExtResource("6_r")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.9759, 0.1952, -0.09759)
+
+[node name="Stardust4" parent="Planets/Meadow" instance=ExtResource("6_r")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.1422, -0.9481, 0.2844)
+
+[node name="Stardust5" parent="Planets/Pebble" instance=ExtResource("6_r")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.6092, 0.6092, -0.5077)
+
+[node name="ExitPortal" parent="Planets/Meadow" instance=ExtResource("7_r")]
+transform = Transform3D(0, -0.3478, -0.9376, -0.848, -0.4969, 0.1844, -0.53, 0.795, -0.295, -0.3478, -0.4969, 0.795)
+
+[node name="Player" parent="." instance=ExtResource("3_r")]
+transform = Transform3D(1, 0, -0, -0, 1, -0, 0, 0, 1, 0, 10.05, 0)
+
+[node name="CameraRig" parent="." instance=ExtResource("4_r")]
+
+[node name="Hints" type="Node" parent="."]
+script = ExtResource("9_r")
+hints = [SubResource("Hint_0"), SubResource("Hint_1"), SubResource("Hint_2"), SubResource("Hint_3"), SubResource("Hint_4")]

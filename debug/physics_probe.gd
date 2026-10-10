@@ -8,10 +8,14 @@ extends Node
 ##    launch point and hops to planet B (R=6) across each surface gap.
 ## 2) Moon carry: an idle player on a spinning moon; drift in the moon frame.
 ## 3) Respawn: a player teleported into empty space returns to safe footing.
+## 4) Enemy: drop onto a parked spike ball (stomp) and let one roll into the
+##    player (side hit). 5) Lava: stand still vs keep hopping for a few seconds.
 
 const LOG_TAG := "Probe"
 const PLANET_SCENE := preload("res://world/planet.tscn")
 const PLAYER_SCENE := preload("res://player/player.tscn")
+const SPIKE_SCENE := preload("res://world/spike_ball.tscn")
+const LAVA_STYLE := preload("res://world/styles/lava.tres")
 const RIG_SCENE := preload("res://camera/camera_rig.tscn")
 const RADIUS_A := 8.0
 const RADIUS_B := 6.0
@@ -25,6 +29,11 @@ const MOON_SPINS: Array[float] = [30.0, 60.0]
 const RESPAWN_SETTLE := 1.5
 const RESPAWN_TIMEOUT := 6.0
 const LOST_OFFSET := Vector3(0.0, 40.0, 0.0)
+const DROP_HEIGHT := 3.0
+const ENEMY_TIMEOUT := 4.0
+const SIDE_HIT_SPEED_DEG := 25.0
+const LAVA_TIME := 4.0
+const LAVA_HOP_INTERVAL := 0.3
 const SLOPPY_LAUNCH_ANGLE_DEG := 15.0
 const SLOPPY_MAX_SPEED := 10.0
 
@@ -53,6 +62,14 @@ func _ready() -> void:
 	for spin: float in MOON_SPINS:
 		var carry := await _carry_trial(spin)
 		GameLog.info(LOG_TAG, "carry spin=%.0f deg/s drift=%.3f m floor_ratio=%.2f" % [spin, carry["drift"], carry["floor_ratio"]])
+	var stomp := await _enemy_trial(true)
+	GameLog.info(LOG_TAG, "enemy stomp: defeated=%s damage=%d bounced=%s" % [stomp["defeated"], stomp["damage"], stomp["bounced"]])
+	var side := await _enemy_trial(false)
+	GameLog.info(LOG_TAG, "enemy side hit: defeated=%s damage=%d bounced=%s" % [side["defeated"], side["damage"], side["bounced"]])
+	for hopping: bool in [false, true]:
+		var lava := await _lava_trial(hopping)
+		GameLog.info(LOG_TAG, "lava %s %.0f s: damage=%d bounces=%d max_heat=%.2f" % [
+			"hopping" if hopping else "standing", LAVA_TIME, lava["damage"], lava["bounces"], lava["max_heat"]])
 	var respawn := await _respawn_trial()
 	GameLog.info(LOG_TAG, "respawn lost_after=%.2f s back_on_floor=%s distance_to_safe=%.3f m losses=%d" % [
 		respawn["lost_time"], respawn["on_floor"], respawn["distance"], respawn["losses"]])
@@ -135,6 +152,55 @@ func _respawn_trial() -> Dictionary:
 	await _wait(0.5)
 	var result := {"lost_time": time, "on_floor": player.is_on_floor(),
 		"distance": player.global_position.distance_to(safe), "losses": player.respawn_tracker.losses}
+	await _dispose(level)
+	return result
+
+
+## stomp=true: player falls onto a parked ball. false: a ball rolls into a
+## standing player from the side.
+func _enemy_trial(stomp: bool) -> Dictionary:
+	var top := Vector3(0.0, RADIUS_A + SPAWN_LIFT, 0.0)
+	var spawn := top + Vector3.UP * DROP_HEIGHT if stomp else top
+	var level := _build_level([_planet_spec("Arena", RADIUS_A, Vector3.ZERO)],
+		Transform3D(Basis.IDENTITY, spawn), Level.InputMode.NONE)
+	var planet := level.planets()[0]
+	var enemy := SPIKE_SCENE.instantiate() as SpikeBall
+	enemy.patrol_axis = Vector3.RIGHT
+	enemy.start_direction = Vector3.UP if stomp else Vector3(0.0, 0.6, -0.8)
+	enemy.patrol_speed_deg = 0.0 if stomp else SIDE_HIT_SPEED_DEG
+	planet.add_child(enemy)
+	var player := level.player
+	var bounced := [false]
+	player.bounced.connect(func() -> void: bounced[0] = true)
+	var time := 0.0
+	while time < ENEMY_TIMEOUT and not enemy.is_defeated and player.health.damage_taken == 0:
+		await get_tree().physics_frame
+		time += get_physics_process_delta_time()
+	var result := {"defeated": enemy.is_defeated, "damage": player.health.damage_taken, "bounced": bounced[0]}
+	await _dispose(level)
+	return result
+
+
+func _lava_trial(hopping: bool) -> Dictionary:
+	var level := _build_level([_planet_spec("Cinder", RADIUS_A, Vector3.ZERO)],
+		Transform3D(Basis.IDENTITY, Vector3(0.0, RADIUS_A + SPAWN_LIFT, 0.0)), Level.InputMode.NONE)
+	level.planets()[0].style = LAVA_STYLE
+	var player := level.player
+	var bounces := [0]
+	player.bounced.connect(func() -> void: bounces[0] += 1)
+	var max_heat := 0.0
+	var time := 0.0
+	var floor_time := 0.0
+	while time < LAVA_TIME:
+		await get_tree().physics_frame
+		var dt := get_physics_process_delta_time()
+		time += dt
+		max_heat = maxf(max_heat, player.heat)
+		floor_time = floor_time + dt if player.is_on_floor() else 0.0
+		if hopping and floor_time >= LAVA_HOP_INTERVAL:
+			player.bounce(player.jump_speed)
+			floor_time = 0.0
+	var result := {"damage": player.health.damage_taken, "bounces": bounces[0], "max_heat": max_heat}
 	await _dispose(level)
 	return result
 

@@ -6,7 +6,7 @@ extends Node
 
 const LOG_TAG := "Demo"
 
-@export_file("*.tscn") var target_scene: String = "res://levels/dev/sandbox_b.tscn"
+@export_file("*.tscn") var target_scene: String = "res://main/main.tscn"
 
 
 func _ready() -> void:

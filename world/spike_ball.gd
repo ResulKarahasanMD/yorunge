@@ -1,0 +1,138 @@
+class_name SpikeBall
+extends Node3D
+## Spiked enemy that rolls a great circle around its planet. The node sits at
+## the planet centre (parent it directly under a Planet) and spins about
+## `patrol_axis`; its Body child rides the surface. Landing on top (feet above
+## the ball centre while falling) destroys it and bounces the player; any other
+## contact costs a heart.
+
+signal defeated(enemy: SpikeBall)
+
+const GROUP := &"enemies"
+const LOG_TAG := "Enemy"
+const GOLDEN_RATIO := 1.618034
+## Icosahedron vertex directions for the spikes.
+const SPIKE_DIRECTIONS: Array[Vector3] = [
+	Vector3(0, 1, GOLDEN_RATIO), Vector3(0, 1, -GOLDEN_RATIO), Vector3(0, -1, GOLDEN_RATIO), Vector3(0, -1, -GOLDEN_RATIO),
+	Vector3(1, GOLDEN_RATIO, 0), Vector3(1, -GOLDEN_RATIO, 0), Vector3(-1, GOLDEN_RATIO, 0), Vector3(-1, -GOLDEN_RATIO, 0),
+	Vector3(GOLDEN_RATIO, 0, 1), Vector3(GOLDEN_RATIO, 0, -1), Vector3(-GOLDEN_RATIO, 0, 1), Vector3(-GOLDEN_RATIO, 0, -1),
+]
+const SPIKE_LENGTH := 0.4
+const SPIKE_BASE_RADIUS := 0.11
+const DEFEAT_TIME := 0.25
+
+@export var patrol_axis: Vector3 = Vector3.RIGHT
+@export var start_direction: Vector3 = Vector3.UP
+@export var patrol_speed_deg: float = 18.0
+@export var ball_radius: float = 0.6
+## Stomp when the player's feet are at least this share of the radius above the centre.
+@export var stomp_height_fraction: float = 0.35
+## Largest upward player speed (m/s, along the ball's up) still counted as landing on it.
+@export var stomp_max_rise_speed: float = 0.5
+@export var stomp_bounce_speed: float = 9.0
+@export var contact_damage: int = 1
+@export var core_color: Color = Color(0.55, 0.12, 0.18)
+@export var spike_color: Color = Color(0.92, 0.9, 0.85)
+
+var host_planet: Planet = null
+var is_defeated: bool = false
+
+@onready var body: Area3D = $Body
+@onready var _visual: Node3D = $Body/Visual
+
+
+## Pure stomp test: `feet_offset` = player feet minus ball centre, `ball_up` =
+## outward unit normal under the ball, `rise_speed` = player velocity · ball_up.
+static func is_stomp(feet_offset: Vector3, ball_up: Vector3, rise_speed: float,
+		radius: float, height_fraction: float, max_rise: float) -> bool:
+	return feet_offset.dot(ball_up) >= radius * height_fraction and rise_speed <= max_rise
+
+
+func _ready() -> void:
+	add_to_group(GROUP)
+	host_planet = SurfaceAnchor.host_planet(self)
+	position = Vector3.ZERO
+	var axis := patrol_axis.normalized()
+	var start := VectorMath.flatten(start_direction, axis)
+	start = start.normalized() if start.length_squared() > VectorMath.MIN_LENGTH_SQ else VectorMath.any_perpendicular(axis)
+	var radius := host_planet.radius if host_planet != null else 0.0
+	body.position = start * (radius + ball_radius)
+	body.basis = Basis.looking_at(axis.cross(start), start)
+	body.collision_layer = PhysicsLayers.ENEMY
+	body.collision_mask = PhysicsLayers.PLAYER
+	(body.get_node(^"CollisionShape3D") as CollisionShape3D).shape = _sphere_shape()
+	body.body_entered.connect(_on_body_entered)
+	_build_visual()
+
+
+func _physics_process(delta: float) -> void:
+	if is_defeated:
+		return
+	rotate_object_local(patrol_axis.normalized(), deg_to_rad(patrol_speed_deg) * delta)
+	_visual.rotate_object_local(Vector3.RIGHT, deg_to_rad(patrol_speed_deg) * delta * 3.0)
+
+
+func ball_up() -> Vector3:
+	if host_planet == null:
+		return body.global_basis.y
+	return (body.global_position - host_planet.global_position).normalized()
+
+
+func defeat() -> void:
+	if is_defeated:
+		return
+	is_defeated = true
+	body.set_deferred(&"monitoring", false)
+	GameLog.info(LOG_TAG, "%s defeated" % name)
+	defeated.emit(self)
+	var tween := create_tween()
+	tween.tween_property(_visual, "scale", Vector3(1.6, 0.15, 1.6), DEFEAT_TIME)
+	tween.tween_callback(queue_free)
+
+
+func _on_body_entered(other: Node3D) -> void:
+	var player := other as PlayerController
+	if player == null or is_defeated:
+		return
+	var up := ball_up()
+	var feet_offset := player.global_position - body.global_position
+	if is_stomp(feet_offset, up, player.velocity.dot(up), ball_radius, stomp_height_fraction, stomp_max_rise_speed):
+		player.bounce(stomp_bounce_speed)
+		defeat()
+	else:
+		player.take_hit(contact_damage, body.global_position, "spike ball")
+
+
+func _sphere_shape() -> SphereShape3D:
+	var shape := SphereShape3D.new()
+	shape.radius = ball_radius
+	return shape
+
+
+func _build_visual() -> void:
+	var core := MeshInstance3D.new()
+	var core_mesh := SphereMesh.new()
+	core_mesh.radius = ball_radius * 0.8
+	core_mesh.height = ball_radius * 1.6
+	core_mesh.material = _material(core_color)
+	core.mesh = core_mesh
+	_visual.add_child(core)
+	var spike_mesh := CylinderMesh.new()
+	spike_mesh.top_radius = 0.0
+	spike_mesh.bottom_radius = SPIKE_BASE_RADIUS
+	spike_mesh.height = SPIKE_LENGTH
+	spike_mesh.material = _material(spike_color)
+	for direction: Vector3 in SPIKE_DIRECTIONS:
+		var dir := direction.normalized()
+		var spike := MeshInstance3D.new()
+		spike.mesh = spike_mesh
+		spike.transform = Transform3D(Basis.looking_at(VectorMath.any_perpendicular(dir), dir),
+			dir * (ball_radius * 0.8 + SPIKE_LENGTH * 0.4))
+		_visual.add_child(spike)
+
+
+func _material(color: Color) -> StandardMaterial3D:
+	var material := StandardMaterial3D.new()
+	material.albedo_color = color
+	material.roughness = 0.5
+	return material

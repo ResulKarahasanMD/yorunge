@@ -2,6 +2,8 @@
 
 [ext_resource type="Script" path="res://player/player_controller.gd" id="1_ctrl"]
 [ext_resource type="Script" path="res://player/respawn_tracker.gd" id="2_respawn"]
+[ext_resource type="Script" path="res://player/player_health.gd" id="3_health"]
+[ext_resource type="Script" path="res://player/player_visual.gd" id="4_visual"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_body"]
 radius = 0.4
@@ -68,7 +70,9 @@ script = ExtResource("1_ctrl")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.75, 0)
 shape = SubResource("CapsuleShape3D_body")
 
-[node name="Visual" type="Node3D" parent="."]
+[node name="Visual" type="Node3D" parent="." node_paths=PackedStringArray("health")]
+script = ExtResource("4_visual")
+health = NodePath("../PlayerHealth")
 
 [node name="Body" type="MeshInstance3D" parent="Visual"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.62, 0)
@@ -104,3 +108,6 @@ mesh = SubResource("Mesh_tip")
 
 [node name="RespawnTracker" type="Node" parent="."]
 script = ExtResource("2_respawn")
+
+[node name="PlayerHealth" type="Node" parent="."]
+script = ExtResource("3_health")

@@ -7,6 +7,8 @@ extends PlayerInput
 ## planets it walks to the launch point facing the next planet of a PlanetGraph
 ## path, slows down, jumps straight at it and steers in the air. When every
 ## goal is a Planet (no pickups in the level) it tours them in order.
+## Hazards: hops off burning ground before it hurts, and jumps at enemies ahead,
+## steering onto them in the air to stomp.
 
 enum Behavior { GREAT_CIRCLE, SEEK }
 enum Phase { IDLE, WALK, LAUNCH, AIRBORNE }
@@ -27,9 +29,13 @@ const MIN_LENGTH_SQ := 0.000001
 @export var launch_slowdown_deg: float = 20.0
 @export var launch_max_speed: float = 1.5
 ## Floating goals at least this high above the feet need a jump when close.
-@export var pickup_jump_altitude: float = 0.8
+@export var pickup_jump_altitude: float = 1.6
 @export var pickup_jump_distance: float = 1.4
 @export var enemy_jump_distance: float = 2.4
+## Hop off burning ground once the player's heat passes this (0..1).
+@export var heat_hop_threshold: float = 0.4
+## Launch angle allowed when leaving burning ground (no slow approach there).
+@export var hot_launch_angle_deg: float = 8.0
 @export var jump_hold_time: float = 0.6
 @export var stuck_jump_time: float = 2.0
 @export var stuck_skip_time: float = 7.0
@@ -45,6 +51,7 @@ var hops_landed: int = 0
 var hop_failures: int = 0
 var goals_reached: int = 0
 var goals_skipped: int = 0
+var stomp_attempts: int = 0
 var elapsed: float = 0.0
 
 var _phase: Phase = Phase.IDLE
@@ -59,6 +66,7 @@ var _tour_index: int = -1
 var _skipped: Array[Node3D] = []
 var _best_distance: float = INF
 var _stuck_timer: float = 0.0
+var _stomp_target: Node3D = null
 
 
 func bind(target: PlayerController) -> void:
@@ -130,6 +138,7 @@ func _seek(delta: float) -> void:
 	if _phase == Phase.LAUNCH or _phase == Phase.AIRBORNE:
 		_on_landed()
 	_phase = Phase.WALK
+	_stomp_target = null
 	var here := player.current_planet
 	if here == null:
 		_wish = Vector3.ZERO
@@ -197,8 +206,7 @@ func _walk_to_goal(delta: float) -> void:
 	_wish = flat.normalized()
 	if flat.length() < pickup_jump_distance and to_goal.dot(up) > pickup_jump_altitude:
 		_press_jump()
-	if _enemy_ahead(up, _wish):
-		_press_jump()
+	_avoid_hazards(up)
 	_update_stuck(delta, to_goal.length())
 
 
@@ -212,7 +220,10 @@ func _walk_to_launch(here: Planet, goal_planet: Planet) -> void:
 	var scale := clampf(angle / launch_slowdown_deg, 0.15, 1.0)
 	_wish = flat.normalized() * scale if flat.length_squared() > MIN_LENGTH_SQ else Vector3.ZERO
 	state = &"to_launch"
-	if angle <= launch_angle_deg and player.tangential_velocity().length() <= launch_max_speed:
+	var burning := player.heat > 0.0
+	var ready_to_launch := angle <= hot_launch_angle_deg if burning else (
+		angle <= launch_angle_deg and player.tangential_velocity().length() <= launch_max_speed)
+	if ready_to_launch:
 		hops += 1
 		_launch_from = here
 		_phase = Phase.LAUNCH
@@ -221,13 +232,15 @@ func _walk_to_launch(here: Planet, goal_planet: Planet) -> void:
 		GameLog.info(LOG_TAG, "hop #%d %s -> %s (gap %.2f m)" % [
 			hops, here.name, hop_target.name, PlanetGraph.surface_gap(
 				here.global_position, here.radius, hop_target.global_position, hop_target.radius)])
-	elif _enemy_ahead(up, _wish):
-		_press_jump()
+	else:
+		_avoid_hazards(up)
 
 
 func _steer_in_air(goal_planet: Planet) -> void:
 	var aim: Vector3
-	if player.current_planet == goal_planet and not (goal is Planet):
+	if _stomp_target != null and is_instance_valid(_stomp_target):
+		aim = _stomp_target.global_position
+	elif player.current_planet == goal_planet and not (goal is Planet):
 		aim = goal.global_position
 	elif hop_target != null:
 		aim = hop_target.global_position
@@ -281,15 +294,26 @@ func _update_stuck(delta: float, distance: float) -> void:
 		_press_jump()
 
 
-func _enemy_ahead(up: Vector3, direction: Vector3) -> bool:
+func _avoid_hazards(up: Vector3) -> void:
+	if player.heat > heat_hop_threshold:
+		_press_jump()
+		return
+	var enemy := _enemy_ahead(up, _wish)
+	if enemy != null and player.is_on_floor():
+		_stomp_target = enemy
+		stomp_attempts += 1
+		_press_jump()
+
+
+func _enemy_ahead(up: Vector3, direction: Vector3) -> Node3D:
 	if direction.length_squared() < MIN_LENGTH_SQ:
-		return false
+		return null
 	for enemy: Node3D in level.demo_threats():
 		var to_enemy := enemy.global_position - player.global_position
 		var flat := VectorMath.flatten(to_enemy, up)
 		if flat.length() < enemy_jump_distance and flat.normalized().dot(direction.normalized()) > 0.6:
-			return true
-	return false
+			return enemy
+	return null
 
 
 func _press_jump() -> void:

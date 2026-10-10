@@ -1,0 +1,105 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://levels/level.gd" id="1_r"]
+[ext_resource type="PackedScene" path="res://world/planet.tscn" id="2_r"]
+[ext_resource type="PackedScene" path="res://player/player.tscn" id="3_r"]
+[ext_resource type="PackedScene" path="res://camera/camera_rig.tscn" id="4_r"]
+[ext_resource type="PackedScene" path="res://world/space_backdrop.tscn" id="5_r"]
+[ext_resource type="PackedScene" path="res://world/stardust.tscn" id="6_r"]
+[ext_resource type="PackedScene" path="res://world/exit_portal.tscn" id="7_r"]
+[ext_resource type="PackedScene" path="res://world/spike_ball.tscn" id="8_r"]
+[ext_resource type="Script" path="res://levels/tutorial_hints.gd" id="9_r"]
+[ext_resource type="Script" path="res://levels/tutorial_hint.gd" id="10_r"]
+[ext_resource type="Resource" path="res://world/styles/grass.tres" id="11_r"]
+[ext_resource type="Resource" path="res://world/styles/lava.tres" id="12_r"]
+[ext_resource type="Resource" path="res://world/styles/moon.tres" id="13_r"]
+
+[sub_resource type="Resource" id="Hint_0"]
+script = ExtResource("10_r")
+text = "Dikenli kürelere yandan dokunma; üstlerine zıplayarak ez!"
+trigger = 0
+
+[sub_resource type="Resource" id="Hint_1"]
+script = ExtResource("10_r")
+text = "Lav ısıtır: üstünde durma, zıplayarak ilerle. Dönen ayda dengede kal."
+trigger = 3
+
+[sub_resource type="Resource" id="Hint_2"]
+script = ExtResource("10_r")
+text = "Portal açıldı! Son gezegene koş."
+trigger = 5
+
+[node name="Tutorial03" type="Node3D" node_paths=PackedStringArray("player", "camera_rig")]
+script = ExtResource("1_r")
+level_id = "tutorial_03"
+level_title = "3 · Tehlike"
+player = NodePath("Player")
+camera_rig = NodePath("CameraRig")
+
+[node name="SpaceBackdrop" parent="." instance=ExtResource("5_r")]
+
+[node name="Planets" type="Node3D" parent="."]
+
+[node name="Outpost" parent="Planets" instance=ExtResource("2_r")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
+radius = 9.0
+style = ExtResource("11_r")
+
+[node name="Cinder" parent="Planets" instance=ExtResource("2_r")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 20, 0, 0)
+radius = 7.0
+style = ExtResource("12_r")
+
+[node name="Whirl" parent="Planets" instance=ExtResource("2_r")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 23.64, 1.454, -13.96)
+radius = 4.0
+style = ExtResource("13_r")
+spin_axis = Vector3(0.2822, 0.9407, 0.1881)
+spin_speed_deg = 30.0
+
+[node name="Haven" parent="Planets" instance=ExtResource("2_r")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 12.05, 3.771, -24)
+radius = 7.0
+style = ExtResource("11_r")
+
+[node name="Stardust1" parent="Planets/Outpost" instance=ExtResource("6_r")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.9407, 0.1881, 0.2822)
+
+[node name="Stardust2" parent="Planets/Cinder" instance=ExtResource("6_r")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.1925, 0.9623, 0.1925)
+
+[node name="Stardust3" parent="Planets/Cinder" instance=ExtResource("6_r")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5077, -0.6092, -0.6092)
+
+[node name="Stardust4" parent="Planets/Whirl" instance=ExtResource("6_r")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
+
+[node name="Stardust5" parent="Planets/Haven" instance=ExtResource("6_r")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.3015, 0.9045, -0.3015)
+
+[node name="ExitPortal" parent="Planets/Haven" instance=ExtResource("7_r")]
+transform = Transform3D(-0.7809, -0.6116, 0.1273, 0, -0.2039, -0.979, 0.6247, -0.7645, 0.1592, -0.6116, -0.2039, -0.7645)
+
+[node name="SpikeBall1" parent="Planets/Outpost" instance=ExtResource("8_r")]
+patrol_axis = Vector3(0, 1, 0)
+start_direction = Vector3(1, 0, 0)
+patrol_speed_deg = 18.0
+
+[node name="SpikeBall2" parent="Planets/Haven" instance=ExtResource("8_r")]
+patrol_axis = Vector3(1, 0, 0)
+start_direction = Vector3(0, 1, 0)
+patrol_speed_deg = 20.0
+
+[node name="SpikeBall3" parent="Planets/Haven" instance=ExtResource("8_r")]
+patrol_axis = Vector3(0, 0, 1)
+start_direction = Vector3(1, 0, 0)
+patrol_speed_deg = 16.0
+
+[node name="Player" parent="." instance=ExtResource("3_r")]
+transform = Transform3D(1, 0, -0, -0, 1, -0, 0, 0, 1, 0, 9.05, 0)
+
+[node name="CameraRig" parent="." instance=ExtResource("4_r")]
+
+[node name="Hints" type="Node" parent="."]
+script = ExtResource("9_r")
+hints = [SubResource("Hint_0"), SubResource("Hint_1"), SubResource("Hint_2")]
