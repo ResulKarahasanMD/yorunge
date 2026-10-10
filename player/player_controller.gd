@@ -183,17 +183,23 @@ func _after_slide(pre_slide_velocity: Vector3) -> void:
 
 
 func _update_orientation(delta: float) -> void:
-	var up := current_up
-	var flat_facing := facing - up * facing.dot(up)
-	if flat_facing.length_squared() < MIN_LENGTH_SQ:
-		flat_facing = up.cross(Vector3.RIGHT if absf(up.x) < 0.9 else Vector3.FORWARD)
-	flat_facing = flat_facing.normalized()
-
 	var travel := tangential_velocity()
-	if travel.length() > facing_min_speed:
-		var weight := 1.0 - exp(-turn_sharpness * delta)
-		var turned := flat_facing.slerp(travel.normalized(), weight)
-		if turned.length_squared() > MIN_LENGTH_SQ:
-			flat_facing = turned.normalized()
-	facing = flat_facing
-	global_basis = Basis.looking_at(facing, up)
+	var weight := 1.0 - exp(-turn_sharpness * delta) if travel.length() > facing_min_speed else 0.0
+	facing = turn_facing(facing, travel, current_up, weight)
+	global_basis = Basis.looking_at(facing, current_up)
+
+
+## Turns `current` toward `desired` about `up` by `weight` (0..1) of the signed
+## angle between them, and returns a unit vector in the plane perpendicular to
+## `up`. Rotating about `up` stays defined for opposite vectors, where slerp's
+## axis is not (that produced a tilted body after head bumps).
+static func turn_facing(current: Vector3, desired: Vector3, up: Vector3, weight: float) -> Vector3:
+	var flat := current - up * current.dot(up)
+	if flat.length_squared() < MIN_LENGTH_SQ:
+		flat = up.cross(Vector3.RIGHT if absf(up.x) < 0.9 else Vector3.FORWARD)
+	flat = flat.normalized()
+	var flat_desired := desired - up * desired.dot(up)
+	if weight <= 0.0 or flat_desired.length_squared() < MIN_LENGTH_SQ:
+		return flat
+	var angle := flat.signed_angle_to(flat_desired, up)
+	return flat.rotated(up, angle * clampf(weight, 0.0, 1.0)).normalized()

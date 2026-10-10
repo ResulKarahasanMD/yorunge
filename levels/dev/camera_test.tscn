@@ -19,3 +19,6 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -6.65, 11.518)
 
 [node name="Rock320" parent="Rocks" instance=ExtResource("2_rock")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 10.188, 8.549)
+
+[node name="CameraRig" parent="." index="5"]
+track_visibility = true

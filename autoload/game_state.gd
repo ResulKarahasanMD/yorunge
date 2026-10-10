@@ -11,3 +11,5 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	InputBindings.register_defaults()
 	GameLog.info(LOG_TAG, "boot: demo_mode=%s" % DemoMode.is_active())
+	if not FrameCapture.requested_path().is_empty():
+		add_child(FrameCapture.new())
