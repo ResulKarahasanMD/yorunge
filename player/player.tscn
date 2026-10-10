@@ -4,29 +4,51 @@
 [ext_resource type="Script" path="res://player/respawn_tracker.gd" id="2_respawn"]
 [ext_resource type="Script" path="res://player/player_health.gd" id="3_health"]
 [ext_resource type="Script" path="res://player/player_visual.gd" id="4_visual"]
+[ext_resource type="Shader" path="res://shaders/outline.gdshader" id="5_outline"]
+[ext_resource type="Shader" path="res://shaders/toon.gdshader" id="6_toon"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_body"]
 radius = 0.4
 height = 1.5
 
-[sub_resource type="StandardMaterial3D" id="Mat_suit"]
-albedo_color = Color(0.94, 0.95, 0.98, 1)
-roughness = 0.55
+[sub_resource type="ShaderMaterial" id="Mat_outline"]
+render_priority = 0
+shader = ExtResource("5_outline")
+shader_parameter/outline_color = Color(0.07, 0.05, 0.12, 1)
+shader_parameter/outline_width = 0.022
 
-[sub_resource type="StandardMaterial3D" id="Mat_accent"]
-albedo_color = Color(1, 0.52, 0.16, 1)
-roughness = 0.5
+[sub_resource type="ShaderMaterial" id="Mat_suit"]
+render_priority = 0
+next_pass = SubResource("Mat_outline")
+shader = ExtResource("6_toon")
+shader_parameter/albedo = Color(0.94, 0.95, 0.98, 1)
+shader_parameter/rim_strength = 0.7
+shader_parameter/spec_strength = 0.3
+shader_parameter/shininess = 40.0
 
-[sub_resource type="StandardMaterial3D" id="Mat_visor"]
-albedo_color = Color(0.08, 0.2, 0.36, 1)
-metallic = 0.4
-roughness = 0.12
+[sub_resource type="ShaderMaterial" id="Mat_accent"]
+render_priority = 0
+next_pass = SubResource("Mat_outline")
+shader = ExtResource("6_toon")
+shader_parameter/albedo = Color(1, 0.52, 0.16, 1)
+shader_parameter/rim_strength = 0.6
+shader_parameter/spec_strength = 0.2
 
-[sub_resource type="StandardMaterial3D" id="Mat_glow"]
-albedo_color = Color(0.55, 0.95, 1, 1)
-emission_enabled = true
-emission = Color(0.4, 0.9, 1, 1)
-emission_energy_multiplier = 2.5
+[sub_resource type="ShaderMaterial" id="Mat_visor"]
+render_priority = 0
+next_pass = SubResource("Mat_outline")
+shader = ExtResource("6_toon")
+shader_parameter/albedo = Color(0.08, 0.2, 0.36, 1)
+shader_parameter/rim_strength = 1.0
+shader_parameter/spec_strength = 1.2
+shader_parameter/shininess = 96.0
+
+[sub_resource type="ShaderMaterial" id="Mat_glow"]
+render_priority = 0
+shader = ExtResource("6_toon")
+shader_parameter/albedo = Color(0.55, 0.95, 1, 1)
+shader_parameter/emission_color = Color(0.4, 0.9, 1, 1)
+shader_parameter/emission_energy = 3.0
 
 [sub_resource type="CapsuleMesh" id="Mesh_body"]
 material = SubResource("Mat_suit")

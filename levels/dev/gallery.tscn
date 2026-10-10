@@ -1,0 +1,66 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://levels/level.gd" id="1_level"]
+[ext_resource type="PackedScene" path="res://world/planet.tscn" id="2_planet"]
+[ext_resource type="PackedScene" path="res://player/player.tscn" id="3_player"]
+[ext_resource type="PackedScene" path="res://camera/camera_rig.tscn" id="4_rig"]
+[ext_resource type="PackedScene" path="res://world/space_backdrop.tscn" id="5_backdrop"]
+[ext_resource type="Resource" path="res://world/styles/grass.tres" id="6_grass"]
+[ext_resource type="Resource" path="res://world/styles/ice.tres" id="7_ice"]
+[ext_resource type="Resource" path="res://world/styles/lava.tres" id="8_lava"]
+[ext_resource type="Resource" path="res://world/styles/moon.tres" id="9_moon"]
+[ext_resource type="PackedScene" path="res://world/exit_portal.tscn" id="10_portal"]
+[ext_resource type="PackedScene" path="res://world/spike_ball.tscn" id="11_spike"]
+[ext_resource type="Script" path="res://debug/showcase_camera.gd" id="12_cam"]
+
+[node name="Gallery" type="Node3D" node_paths=PackedStringArray("player", "camera_rig")]
+script = ExtResource("1_level")
+level_id = "gallery"
+level_title = "Galeri"
+player = NodePath("Player")
+camera_rig = NodePath("CameraRig")
+input_mode = 3
+
+[node name="SpaceBackdrop" parent="." instance=ExtResource("5_backdrop")]
+
+[node name="Planets" type="Node3D" parent="."]
+
+[node name="Grass" parent="Planets" instance=ExtResource("2_planet")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -21, 0, 0)
+radius = 6.0
+style = ExtResource("6_grass")
+
+[node name="SpikeBall" parent="Planets/Grass" instance=ExtResource("11_spike")]
+patrol_axis = Vector3(1, 0, 0)
+start_direction = Vector3(0, 0.6, 0.8)
+patrol_speed_deg = 0.0
+
+[node name="Ice" parent="Planets" instance=ExtResource("2_planet")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -7, 0, 0)
+radius = 6.0
+style = ExtResource("7_ice")
+
+[node name="ExitPortal" parent="Planets/Ice" instance=ExtResource("10_portal")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.7, 0.7)
+
+[node name="Lava" parent="Planets" instance=ExtResource("2_planet")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 0, 0)
+radius = 6.0
+style = ExtResource("8_lava")
+
+[node name="Moon" parent="Planets" instance=ExtResource("2_planet")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 21, 0, 0)
+radius = 6.0
+style = ExtResource("9_moon")
+spin_speed_deg = 15.0
+
+[node name="Player" parent="." instance=ExtResource("3_player")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -21, 6.05, 0)
+
+[node name="CameraRig" parent="." instance=ExtResource("4_rig")]
+
+[node name="ShowcaseCamera" type="Camera3D" parent="."]
+transform = Transform3D(1.0000, 0.0000, -0.0000, -0.0000, 0.9635, 0.2676, 0.0000, -0.2676, 0.9635, 0.0000, 9.0000, 36.0000)
+fov = 60.0
+far = 600.0
+script = ExtResource("12_cam")

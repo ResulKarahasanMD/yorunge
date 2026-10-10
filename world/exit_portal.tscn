@@ -1,14 +1,30 @@
 [gd_scene format=3]
 
 [ext_resource type="Script" path="res://world/exit_portal.gd" id="1_portal"]
+[ext_resource type="Shader" path="res://shaders/toon.gdshader" id="2_toon"]
+[ext_resource type="Shader" path="res://shaders/portal.gdshader" id="3_portal"]
+[ext_resource type="Shader" path="res://shaders/outline.gdshader" id="4_outline"]
 
 [sub_resource type="SphereShape3D" id="SphereShape3D_portal"]
 radius = 1.15
 
-[sub_resource type="StandardMaterial3D" id="Mat_ring"]
-albedo_color = Color(0.62, 0.5, 0.95, 1)
-metallic = 0.5
-roughness = 0.3
+[sub_resource type="ShaderMaterial" id="Mat_ring_outline"]
+render_priority = 0
+shader = ExtResource("4_outline")
+shader_parameter/outline_width = 0.03
+
+[sub_resource type="ShaderMaterial" id="Mat_ring"]
+render_priority = 0
+next_pass = SubResource("Mat_ring_outline")
+shader = ExtResource("2_toon")
+shader_parameter/albedo = Color(0.62, 0.5, 0.95, 1)
+shader_parameter/rim_strength = 0.8
+shader_parameter/spec_strength = 0.8
+shader_parameter/shininess = 64.0
+
+[sub_resource type="ShaderMaterial" id="Mat_disc"]
+render_priority = 0
+shader = ExtResource("3_portal")
 
 [sub_resource type="TorusMesh" id="TorusMesh_ring"]
 material = SubResource("Mat_ring")
@@ -38,4 +54,5 @@ mesh = SubResource("TorusMesh_ring")
 
 [node name="Disc" type="MeshInstance3D" parent="Visual"]
 transform = Transform3D(1, 0, 0, 0, 0, -1, 0, 1, 0, 0, 0, 0)
+material_override = SubResource("Mat_disc")
 mesh = SubResource("CylinderMesh_disc")

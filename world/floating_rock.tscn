@@ -1,11 +1,14 @@
 [gd_scene format=3]
 
+[ext_resource type="Shader" path="res://shaders/toon.gdshader" id="1_toon"]
+
 [sub_resource type="SphereShape3D" id="SphereShape3D_rock"]
 radius = 1.0
 
-[sub_resource type="StandardMaterial3D" id="Mat_rock"]
-albedo_color = Color(0.5, 0.47, 0.55, 1)
-roughness = 0.95
+[sub_resource type="ShaderMaterial" id="Mat_rock"]
+render_priority = 0
+shader = ExtResource("1_toon")
+shader_parameter/albedo = Color(0.5, 0.47, 0.55, 1)
 
 [sub_resource type="SphereMesh" id="SphereMesh_rock"]
 material = SubResource("Mat_rock")

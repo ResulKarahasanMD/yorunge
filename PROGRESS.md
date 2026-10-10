@@ -6,8 +6,8 @@
 | (a) Yerçekimi + karakter + kamera | `ma` | ✅ kullanıcı onayladı | 2026-10-10 |
 | (b) Çoklu gezegen + geçişler | `mb` | ✅ | 2026-10-10 |
 | (c) Toz, portal, seviye akışı, düşman, hasar | `mc` | ✅ | 2026-10-10 |
-| (d) Shader ve görsel cila | `md` | ⏳ sürüyor | |
-| (e) Ses + juice | `me` | ⬜ | |
+| (d) Shader ve görsel cila | `md` | ✅ | 2026-10-10 |
+| (e) Ses + juice | `me` | ⏳ sürüyor | |
 | (f) Menüler + kayıt | `mf` | ⬜ | |
 | (g) Prosedürel mod | `mg` | ⬜ | |
 | (h) Uçtan uca DemoBot testi | `mh` | ⬜ | |
@@ -171,6 +171,46 @@ Beckett MCP oturumu bu revizyon sırasında koptu (Godot 8770'te dinliyor, Claud
   - 5 sn performans (T3): FPS 120/120/120, draw call ort 71, physics 1,3 ms. Uyarı 0.
 - **Testler:** **1602 kontrol, 0 hata** (+`test_hazards` 15, `test_level_flow` 11).
 
+## (d) Shader ve görsel cila — 2026-10-10
+### Kod
+- `shaders/noise.gdshaderinc`: hash, değer gürültüsü, 4 oktav fbm, 3D voronoi (F1, F2, id).
+- `shaders/toon_light.gdshaderinc`: iki adımlı toon diffuse, ışık yönlü kenar parlaması, sert yansıma bandı. Godot 4.7 belgesine göre `LIGHT_COLOR / PI` ve albedo çarpımını motor yapıyor (context7 ile doğrulandı).
+- `toon.gdshader` + `outline.gdshader` (ters gövde dış hattı, `next_pass`): oyuncu, dikenli küre, portal halkası, kaya, dekorasyonlar.
+- `planet_surface.gdshader`: nesne uzayında fbm renk rampası + yüzey tipine göre katman:
+  - çimen: koyu sınırlar ve çiçek noktaları;
+  - buz: levha çatlakları ve yanıp sönen parıltılar;
+  - lav: kayan kabuk levhaları arasında ışıyan, nabız gibi atan dikişler;
+  - kaya: kraterler.
+  - Vertex displacement yok, çarpışma küresiyle birebir.
+- `atmosphere.gdshader`: parıltı = görüş ışınının kabukta aldığı yol ÷ en uzun teğet kiriş (gezegen gölgesi düşülmüş). İki ara sürüm reddedildi:
+  - N·V kenarı: yakından düz bir bant veriyordu.
+  - "En yakın geçiş" ölçütü: kamera kabuğa girince bütün gökyüzünü yıkıyordu.
+- `starfield_sky.gdshader`: iki katman yıldız (parıldar), fbm nebula, güneş diski ve halesi. Küp harita geçişinde yıldız yok; ışınım haritası 32 piksel.
+- `stardust.gdshader`, `portal.gdshader` (girdap; `active` 0→1, 0,8 sn tween).
+- `world/SurfaceDecorator`: MultiMesh dekorasyon (çimen tutamı ve çiçek / buz kristali / lav kayası ve köz / kaya). Yoğunluk m² başına, tür başına en fazla 1500. Gezegen adı ve yarıçapından seed. Saf `scatter_transforms()` fonksiyonu.
+- `world/ToonMaterials` fabrikası. `Planet`: yüzey shader'ı, atmosfer kabuğu (1,15 R), dekoratör.
+- Ortam (`space_backdrop.tscn`): gökyüzü arka planı, ortam ışığı renkten (0,8), yansıma kapalı, AgX tonemap, glow (screen, eşik 1,0). MSAA 3D 2×.
+- `levels/dev/gallery.tscn` + `debug/ShowcaseCamera`: dört gezegen tipi tek karede.
+
+### Doğrulama
+- **Beckett galeri görüntüsü:** dört tip ayırt edilebiliyor. Ayrıca T1 (gece yüzü, güneş diski, hale) ve T3 (dört gezegen + 3 diken + yıldız tozları) görüntüleri alındı. Shader hata/uyarısı 0.
+- **Görülen sorunlar ve düzeltmeleri** (ekran görüntüsüyle):
+
+| Görülen | Sebep | Düzeltme |
+|---|---|---|
+| Gezegenlerde büyük beyaz leke | Mat yüzeyde geniş yansıma bandı | Yansıma 0; buzda 0,45 + parlaklık 96 |
+| Kalın haleler | — | Ölçek 1,22 → 1,15, yoğunluk 0,55 |
+| Ufukta su gibi katı bant ve kabuk içinde yıkanmış gökyüzü | Hale ölçütü | Yol uzunluğu modeline geçildi |
+| Soluk beyaz çimen | Prizma yüzlerinde yansıma bandı + açık ton | Dekorasyonda yansıma 0, ton color_low → color_mid |
+
+- **`set_debug_draw overdraw`:** gezegen + atmosfer ≈ 2 katman, sıcak nokta yok.
+- **Performans** (1968×1107 oyun görüntüsü, 10 sn):
+  - Galeri: FPS **119,8 ort / 118 min**, draw call 80, 255 bin primitive.
+  - T1 demo: **119,6 / 117**, draw call 77.
+  - Ekran görüntüsüyle paralel ölçülen pencerede min 87 ve 0,53 sn takılma görüldü; tek başına ölçümde yok. Beckett yakalama etkisi.
+- **Headless demo:** 3 tutorial'ın süreleri (20,22 / 16,47 / 43,15 sn) önceki milestone'la birebir aynı; görsel değişiklik oynanışı etkilemedi.
+- **Testler:** **1617 kontrol, 0 hata**. `test_visuals` 15 kontrol: dekor sayısı = alan × yoğunluk, üst sınır, yüzeyde ve dik duruyor, seed deterministik, outline geçişi, gezegen shader parametreleri. Not: MultiMesh verisi headless'ta okunamadığı için yerleşim saf fonksiyondan test ediliyor.
+
 ## Çalışma modu (2026-10-10, kullanıcı)
 b→h tek oturumda, onay beklemeden. Her milestone'da şu adımlar:
 1. Testler.
@@ -194,6 +234,9 @@ _(kullanıcı sonradan değiştirebilir; her biri gerekçesiyle)_
 - **İpucu metinleri seviye sahnelerinde** (`TutorialHint` kaynakları). Arayüz metinleri `ui/ui_text.gd`'de. Gerekçe: ipuçları seviye içeriği.
 - **Seviye bitince 2,5 sn sonra sıradaki tutorial, ölümde 1,5 sn sonra tekrar.** (f)'de seviye sonu ekranı araya girecek.
 - **Kalp ve yıldız simgeleri kodla çiziliyor** (harici asset yok).
+- **Görsel dil: toon + ince koyu dış hat** (karakter, düşman, portal); gezegenlerde dış hat yok (büyük kürelerde kalın görünüyor). AgX tonemap ve glow.
+- **Dekorasyonlar çarpışmasız** (oynanışı etkilemesin, DemoBot ölçümleri değişmesin). Gölge düşürmüyor (performans).
+- **`shaders/debug_checker.gdshader` artık kullanılmıyor**; silme kullanıcı onayına bırakıldı (kural: silme öncesi sor).
 
 ## Ölçümler
 | Milestone | Sahne | FPS ort | FPS min | draw call ort | physics_process ort | Not |
@@ -202,6 +245,8 @@ _(kullanıcı sonradan değiştirebilir; her biri gerekçesiyle)_
 | (a) rev1 | camera_test (1 gezegen + 4 kaya) | 98 | 72 | 22 | 2,6 ms | 3 sn; boom shape-cast her karede |
 | (b) | sandbox_b (4 gezegen, demo) | 120 | 120 | 35 | 1,7 ms | 5 sn; 120 Hz vsync sınırı |
 | (c) | tutorial_03 (4 gezegen, 3 düşman, demo) | 120 | 120 | 71 | 1,3 ms | 5 sn |
+| (d) | gallery (4 tip, sabit kamera) | 119,8 | 118 | 80 | 1,4 ms | 10 sn, shader'lar + dekor + glow |
+| (d) | tutorial_01 demo | 119,6 | 117 | 77 | 3,5 ms | 10 sn |
 
 ## Açık sorunlar / notlar
 - (a) `get_performance_monitors` → `process_time` max 0,75 sn, ort 0,14 sn. FPS ort 104 ile çelişiyor; büyük olasılıkla Beckett örneklemesi/ekran görüntüsü sırasında ana iş parçacığı bekliyor. (d)'de daha kalabalık sahnede yeniden ölçülecek.

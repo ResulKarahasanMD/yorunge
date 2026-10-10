@@ -114,14 +114,14 @@ func _build_visual() -> void:
 	var core_mesh := SphereMesh.new()
 	core_mesh.radius = ball_radius * 0.8
 	core_mesh.height = ball_radius * 1.6
-	core_mesh.material = _material(core_color)
+	core_mesh.material = ToonMaterials.make(core_color, 0.7, 0.4)
 	core.mesh = core_mesh
 	_visual.add_child(core)
 	var spike_mesh := CylinderMesh.new()
 	spike_mesh.top_radius = 0.0
 	spike_mesh.bottom_radius = SPIKE_BASE_RADIUS
 	spike_mesh.height = SPIKE_LENGTH
-	spike_mesh.material = _material(spike_color)
+	spike_mesh.material = ToonMaterials.make(spike_color, 0.5, 0.6, 0.0)
 	for direction: Vector3 in SPIKE_DIRECTIONS:
 		var dir := direction.normalized()
 		var spike := MeshInstance3D.new()
@@ -130,9 +130,3 @@ func _build_visual() -> void:
 			dir * (ball_radius * 0.8 + SPIKE_LENGTH * 0.4))
 		_visual.add_child(spike)
 
-
-func _material(color: Color) -> StandardMaterial3D:
-	var material := StandardMaterial3D.new()
-	material.albedo_color = color
-	material.roughness = 0.5
-	return material

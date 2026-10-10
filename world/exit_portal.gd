@@ -9,15 +9,14 @@ const GROUP := &"exit_portal"
 const LOG_TAG := "Portal"
 
 @export var hover_altitude: float = 1.35
-@export var dormant_color: Color = Color(0.25, 0.22, 0.35)
-@export var active_color: Color = Color(0.55, 0.85, 1.0)
-@export var active_emission: float = 3.0
 @export var spin_speed_deg: float = 60.0
+## Seconds for the membrane to fade from dormant to active.
+@export var open_time: float = 0.8
 
 var is_active: bool = false
 var host_planet: Planet = null
 
-var _disc_material: StandardMaterial3D
+var _disc_material: ShaderMaterial
 
 @onready var _ring: Node3D = $Visual/Ring
 @onready var _disc: MeshInstance3D = $Visual/Disc
@@ -28,10 +27,9 @@ func _ready() -> void:
 	collision_layer = PhysicsLayers.PICKUP
 	collision_mask = PhysicsLayers.PLAYER
 	host_planet = SurfaceAnchor.snap(self, hover_altitude)
-	_disc_material = StandardMaterial3D.new()
-	_disc_material.emission_enabled = true
+	_disc_material = (_disc.material_override as ShaderMaterial).duplicate() as ShaderMaterial
 	_disc.material_override = _disc_material
-	_apply_look()
+	_disc_material.set_shader_parameter(&"active", 0.0)
 	body_entered.connect(_on_body_entered)
 
 
@@ -44,17 +42,11 @@ func activate() -> void:
 	if is_active:
 		return
 	is_active = true
-	_apply_look()
+	create_tween().tween_method(func(value: float) -> void:
+		_disc_material.set_shader_parameter(&"active", value), 0.0, 1.0, open_time)
 	GameLog.info(LOG_TAG, "activated on %s" % (host_planet.name if host_planet != null else "?"))
 	for body: Node3D in get_overlapping_bodies():
 		_on_body_entered(body)
-
-
-func _apply_look() -> void:
-	var color := active_color if is_active else dormant_color
-	_disc_material.albedo_color = color
-	_disc_material.emission = color
-	_disc_material.emission_energy_multiplier = active_emission if is_active else 0.0
 
 
 func _on_body_entered(body: Node3D) -> void:
