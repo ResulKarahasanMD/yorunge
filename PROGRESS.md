@@ -11,7 +11,7 @@
 | (f) Menüler + kayıt | `mf` | ✅ | 2026-10-10 |
 | (g) Prosedürel mod | `mg` | ✅ | 2026-10-10 |
 | (h) Uçtan uca DemoBot testi | `mh` | ✅ | 2026-10-10 |
-| (i) Düzeltme turu (kod incelemesi) | `mi` | ⏳ pencereli ölçüm temiz makinede bekliyor | 2026-10-11 |
+| (i) Düzeltme turu (kod incelemesi) | `mi` | ✅ | 2026-10-11 |
 
 ## (0) Kurulum — 2026-10-10
 - Git deposu açıldı, tek dal `main`.
@@ -414,7 +414,7 @@ Exit 0, hata 0, uyarı 0. Koşu 218,3 sn; seviye süreleri toplamı 193,91 sn.
 ### Testler
 **1741 kontrol, 0 hata** ((g)'de 1722). `test_leaks` ve yeni lav testleri, gerçek fizik kareleri beklediği için koşu ~10 sn uzadı.
 
-## (i) Düzeltmeler — 2026-10-11
+## (i) Düzeltmeler — 2026-10-11 ✅
 Çalışma şekli: her hata için önce düzeltmeden kırılan bir regresyon testi, sonra düzeltme, sonra geçen test. Ara çıktılar `out_20261011_mi/` altında (git dışı).
 
 ### Hata / sebep / düzeltme / kanıt
@@ -427,8 +427,8 @@ Exit 0, hata 0, uyarı 0. Koşu 218,3 sn; seviye süreleri toplamı 193,91 sn.
 | 5 | Slider sürüklerken her adımda disk yazımı + pencere modu | `set_setting` her çağrıda `save_to_disk()` ve `window_set_mode()` yapıyordu. | Yalnız değişen ayar uygulanıyor (ses → bus, `fullscreen` → pencere). Disk yazımı 0,5 sn debounce. Ayarlar kapanınca ve çıkışta `flush_settings()`. Pencere modu yalnız tam ekran ↔ değil arasında geçiyor; büyütülmüş pencereye dokunmuyor. | `test_slider_drag_neither_writes_each_step_nor_resets_the_window`. Önce: 21 adımda dosya yeniden yazıldı, 21 pencere modu uygulaması. Sonra: adım başına 0, debounce sonrası 1 yazım, tam ekran anahtarında 1 uygulama. |
 | 6 | Gamepad'de geri tuşu yok | Godot 4.7'de `ui_cancel` yalnız Escape'e, `ui_accept` yalnız Enter/Space'e bağlı. Gamepad'le menüde **onay da** yoktu. | `InputBindings` B'yi `ui_cancel`'a, A'yı `ui_accept`'e ekliyor. Kodla eklenen gamepad olayları her cihazla eşleşiyor (`device = -1`). | `test_gamepad_back_and_confirm`. Önce: 7 kontrol kırık. Sonra: 0 (A Seviyeler'i açıyor; B seviye seçimi / ayarlar / sonsuz kurulumdan geri dönüyor, ayarlardan duraklatmaya dönüyor, duraklatmada devam ettiriyor, oyunda duraklatmıyor). |
 | 7 | Seviye yükleme karesi 20–47 ms | Ölçüldü (aşağıda): gezegen başına 2 küre mesh'i üretilip GPU'ya yükleniyordu; dekorasyon 1–4 ms; ilk seviyede parçacık kurulumu 16 ms. | Paylaşılan birim küre (zemin + atmosfer, örnek ölçeğiyle; `planet_surface` `object_scale` alıyor). Dekor mesh ve malzemeleri önbellekte. Dekorasyon yükleme karesinden sonraki karelerde, kare başına bir gezegen. Diken görselleri paylaşılıyor. `Vfx.prewarm` başlık ekranında. | `test_planets_share_unit_spheres`, `test_decorations_follow_the_load_frame_one_planet_per_frame`, `test_spike_balls_share_visuals`. Yükleme karesi (pencereli) 8,2–57,8 → 6,8–13,2 ms. Görsel: sabit pozlarda en büyük fark 1/255 (gece pozunda 921 600 pikselin 2'si > 8). |
-| 8 | ~1 sn takılmalar, ~32 FPS dönemler | Henüz kanıtlanmadı. Bu turda ölçüm altyapısı eklendi. | `DemoReport`: kare başı pipeline derlemeleri (canvas/mesh/surface/draw/specialization; yüklemede / oyunda), her takılma karesi (≥ 50 ms) derlemesi, odağı, çizilebilirliği ve küçültülmüşlüğüyle; yavaş dönemler (25–50 ms kareler) ve odak dışı payları; `unfocused_s`, `undrawable_s`. | `test_hitches_and_slow_periods`. **Temiz makinede pencereli koşu bekliyor.** Ön bulgu: arka planda başlatılan pencereli koşularda pencere bütün koşu boyunca odak dışıydı (`unfocused_s` ≈ seviye süresi). Örtülü pencere çizmeyi bırakabiliyor; autopilot bu yüzden bir kez asılı kaldı (düzeltildi). |
-| 9 | DemoBot ezme 1/13; E3'te her koşu 1 kaçan zıplama | Ezme: bot topa 2,4 m kala zıplıyordu; iniş topun ötesine düşüyordu. E3: son zıplama doğrudan portala giriyor, seviye inişten önce bitiyordu (**sayım hatası, ne bot ne boşluk**; `validate()` kuralı gerekmiyor). | Ezme: topun devriyesinden tahmini konum (`SpikeBall.predicted_body_position`), yay uzaklığı, temiz alan kontrolü, havada tam hız ayarı, ulaşılamazsa vazgeç ve uzak dur, top yaklaşırken gezegenler arası zıplamayı ertele. E3: portala giren zıplama inmiş sayılıyor. | `test_spike_ball_prediction_matches_its_patrol` (0,8 sn ilerisi < 0,05 m), `test_bot_fall_time_and_surface_offset`, `test_hop_into_the_portal_counts_as_landed` (önce 0/1, sonra 1/1). Tarama (30 seviye): ezme 8/100 → 11/14 (%79 ≥ %50 ✓), hasar 10 → 6 (**hedef 0 ✗**). Headless 3+5: ezme 1/13 → 2/3, hasar 1 → 1, zıplama 36/37 → 37/37. |
+| 8 | ~1 sn takılmalar, ~32 FPS dönemler | **Unity Editor + takas kaynaklıydı** (aşağıda: temiz makinede pencereli koşu). Oyunun kendi kodunda sebep yok. | Kod değişikliği gerekmedi. Ölçüm altyapısı: `DemoReport` artık kare başına pipeline derlemelerini (canvas/mesh/surface/draw/specialization; yüklemede ve oyunda ayrı) sayıyor. Her takılma karesini (≥ 50 ms) derleme, odak, çizilebilirlik ve küçültülmüşlük bilgisiyle kaydediyor. Yavaş dönemleri (25–50 ms kareler) ve bunların odak dışı payını, ayrıca `unfocused_s` / `undrawable_s` değerlerini raporluyor. | `test_hitches_and_slow_periods`. Temiz makinede 22 013 karede takılma 0, yavaş kare 0, en kötü kare 24,4 ms. (h)'de Unity açıkken 5 koşunun 3'ünde ~1 sn takılma vardı; 2 seviyede %1 düşük ~32 FPS'ti. |
+| 9 | DemoBot ezme 1/13; E3'te her koşu 1 kaçan zıplama | Ezme: bot topa 2,4 m kala zıplıyordu; iniş topun ötesine düşüyordu. E3: son zıplama doğrudan portala giriyor, seviye inişten önce bitiyordu (**sayım hatası, ne bot ne boşluk**; `validate()` kuralı gerekmiyor). | Ezme: topun devriyesinden tahmini konum (`SpikeBall.predicted_body_position`), yay uzaklığı, temiz alan kontrolü, havada tam hız ayarı, ulaşılamazsa vazgeç ve uzak dur, top yaklaşırken gezegenler arası zıplamayı ertele. E3: portala giren zıplama inmiş sayılıyor. | `test_spike_ball_prediction_matches_its_patrol` (0,8 sn ilerisi < 0,05 m), `test_bot_fall_time_and_surface_offset`, `test_hop_into_the_portal_counts_as_landed` (önce 0/1, sonra 1/1). Tarama (30 seviye): ezme 8/100 → 11/14 (%79 ≥ %50 ✓), hasar 10 → 6 (**hedef 0 ✗**). Headless 3+5: ezme 1/13 → 2/3, hasar 1 → 1, zıplama 36/37 → 37/37. **Kullanıcı kararı (b): ezme kuralı geç teması affediyor** (aşağıda #9b): tarama ezme 11/14 → 12/14, diken hasarı 5 → 4; headless 3+5 hasar 1 → **0**, ezme 3/3. |
 | 10 | Kullanılmayan dosyalar | — | Kullanıcı onayıyla **silindi** (`git rm`, aşağıdaki liste). CLAUDE.md'deki `_old_lighting` anması kaldırıldı. | Silmeden önce editörde yalnız `main.tscn` açıktı. Sonra `grep` (kod, sahne, kaynak, shader, `project.godot`): başvuru 0. Testler 1831 kontrol, 0 hata. |
 | 11 | Tutorial üreticisi depoda yok | Eski bir oturumun scratchpad'inde kalmıştı. | `tools/gen_tutorials.py` (+ `tools/.gdignore`). CLAUDE.md'ye kullanım ve uyarı. | Üç sahne betiğin çıktısıyla bayt düzeyinde aynı (`cmp`). |
 | 12 | Magic number kalıntıları | — | `SpikeBall` görseli, `DemoBot` (zıplama maliyeti, nişan eşiği), `Synth` pad (detune, tremolo), kamera (gezegen içi ufuk, sarsıntı gürültü satırları) `const`. SfxLibrary veri tablosu olarak kaldı: her sayı adlı bir `SynthPatch` alanında, yüz civarında `const` bilgi katmaz. | Pad çıktısı birebir aynı: dikiş adımı 0,00501, p99 0,01102, tepe 0,284. |
@@ -472,8 +472,77 @@ Denenip geri alınan: dekorasyonu tek `multimesh.buffer` atamasıyla yazmak. Pen
 
 Hasarlı temaslarda ayak topun merkezinin +0,21 m eşiğinin altında kalıyor (−0,41…0,20 m), yatay sapma 0,24–0,92 m. 7–9 m/s inişte temas 1–2 fizik karesi geç algılanıyor. Tolerans dar, tepeye yandan gelen iniş diken sayılıyor. **3 tur kuralı aşıldığı için durduruldu; hasar 0 hedefi açık, kullanıcıya soruldu.** Ezme kuralına (oyun tasarımı) dokunulmadı.
 
+### Ezme kuralı geç teması affediyor (#9b, kullanıcı kararı b)
+- **Sorun:** `SpikeBall._on_body_entered` ayak konumunu temas algılandıktan sonra okuyordu. Hızlı inişte temas 1–2 fizik karesi geç algılanıyor, ayak eşiğin altına inmiş oluyor ve tepeye inen oyuncu diken hasarı alıyordu.
+- **Düzeltme:** `SpikeBall.is_stomp` (saf fonksiyon) isteğe bağlı iki parametre aldı: `prev_feet_offset` ve `lateral_reach`.
+  - Ayağın bir adım önceki göreli konumu da ezme sayılabiliyor. Koşul: o adımda ayak eşiğin üstünde, yükselme ≤ `stomp_max_rise_speed` ve yanal mesafe (`ball_up`'a dik) ≤ top yarıçapı + kapsül yarıçapı.
+  - Oyuncunun önceki konumu `PlayerController.previous_global_position` (`move_and_slide` öncesi; ışınlanmada sıfırlanıyor). Topun önceki konumu `predicted_body_position(-1 / physics_ticks_per_second)`. Kapsül yarıçapı `PlayerController.collision_radius()`.
+  - Yeni sayı yok.
+- **Test önce → sonra:** `test_stomp_rule_forgives_late_contact` 4 kontrol içeriyor:
+  - (a) hızlı düşüş (önce +0,5 m, temasta +0,1 m, −12 m/s) → ezme;
+  - (b) yandan yürüme → hasar;
+  - (c) yükselirken → hasar;
+  - (d) yanından düşüp geçme (önceki adımda yanal 1,5 m) → hasar.
+
+  `test_late_contact_on_a_fast_fall_stomps_the_ball` 3 kontrolle `_on_body_entered` üzerinden aynı hızlı düşüşü sınıyor.
+  - Düzeltmesiz kodda test dosyası derlenmedi (`is_stomp` en çok 6 argüman alıyordu). Saf test çıkarıldığında entegrasyon testi 2 kontrolde kırıldı: top yenilmedi, 1 kalp gitti.
+  - Sonra: 0 hata. Mevcut 5 kontrol değişmeden geçiyor.
+- **Ölçüm** (aynı makine, aynı `stomp_sweep.sh`; önce = düzeltmesiz `spike_ball.gd`):
+
+| | Ezme / deneme | Diken hasarı | Lav | Hasar (koşu) | Zıplama |
+|---|---|---|---|---|---|
+| Önce (v3 tabanı birebir) | 11 / 14 | 5 | 1 | 6 (4) | 198/202 |
+| **Sonra** | **12 / 14** | **4** | 1 | 5 (4) | 199/202 |
+
+  - Kalan 4 diken temasının geometrisi geçici bir logla ölçüldü (log commit'lenmedi). Hiçbiri tepeye iniş değil:
+    - 7/6 ve 808/4: ayak bir adım önce de eşiğin altındaydı (−0,11 / −0,09 m, yanal 0,92 / 0,81 m, −11 m/s). Bot topun yanına düşüyor.
+    - 99/4 ve 555/6: oyuncu yükseliyordu (+2,56 / +1,46 m/s). 555/6'da top tepe noktasındaki oyuncunun kapsül yanına yuvarlanıyor.
+  - Kalanlar kuralın değil, botun yaklaşmasının sorunu.
+- **`physics_probe`:** önce de sonra da ezme `defeated=true damage=0`, yandan çarpma `damage=1`.
+- **Headless 3 + 5:** hata 0, uyarı 0.
+
+| | Hasar | Ezme / deneme | Zıplama | Süre toplamı | E4 |
+|---|---|---|---|---|---|
+| (i) | 1 | 2/3 | 37/37 | 184,93 sn | 18,19 sn, hasar 1, ezme 0/1 |
+| **#9b** | **0** | **3/3** | 36/36 | 183,94 sn | 17,20 sn, hasar 0, ezme 1/1 |
+
+### Pencereli 3 + 5, temiz makine (#8)
+`Godot --path . --resolution 1280x720 -- --demo --demo-exit-on-finish --fresh-save --endless-levels=5 --endless-seed=2026 --report-dir=…`, son kod. Çıktı: `out_20261011_mi/i8_windowed/` (git dışı).
+- **Makine:**
+  - Unity Editor kapalıydı. Yalnız Unity MCP relay süreçleri açıktı (toplam ~115 MB).
+  - Takas koşu boyunca sabit 2,14 GB (5 sn arayla 41 örnek). (h)'de 4,2–6 GB'tı ve büyüyordu.
+  - Yük ortalaması 3,6–5,7 ((h)'de 7–10).
+  - Godot editörü ve kullanıcının izniyle masaüstü Claude oturumu açıktı.
+  - Ekran dahili 120 Hz ((h) final 144 Hz).
+- **Sonuç:** exit 0, hata 0, uyarı 0, 207,4 sn. Pencere bütün koşu boyunca odakta ve çizilebilirdi (`unfocused_s` = `undrawable_s` = 0).
+
+| # | Seviye | Süre | FPS ort | %1 düşük | En kötü kare ms | Yükleme karesi ms | Takılma (≥ 50 ms) | Yavaş kare (25–50 ms) | Pipeline yükleme / oyun | (h) final: FPS / %1 düşük / en kötü / yükleme |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | tutorial_01 | 19,25 | 120,0 | 90,8 | 13,6 | 18,1 | 0 | 0 | 12 / 4 | 143,4 / 110,3 / 43,0 / 46,9 |
+| 2 | tutorial_02 | 16,48 | 119,9 | 92,6 | 17,5 | 12,1 | 0 | 0 | 0 / 0 | 144,9 / 119,4 / 9,4 / 21,6 |
+| 3 | tutorial_03 | 20,50 | 120,0 | 91,6 | 11,9 | 10,7 | 0 | 0 | 0 / 0 | 142,5 / 112,9 / 67,1 / 27,4 |
+| 4 | E1 | 17,27 | 120,0 | 92,6 | 11,5 | 14,4 | 0 | 0 | 0 / 0 | 144,9 / 123,9 / 8,8 / 20,1 |
+| 5 | E2 | 20,95 | 119,8 | 92,7 | 18,1 | 10,6 | 0 | 0 | 0 / 0 | 144,8 / 118,9 / 20,8 / 21,8 |
+| 6 | E3 | 29,97 | 119,9 | 91,8 | 17,9 | 8,8 | 0 | 0 | 0 / 0 | 97,1 / **32,0** / 63,0 / 22,6 |
+| 7 | E4 | 17,19 | 120,0 | 90,7 | 12,0 | 10,7 | 0 | 0 | 0 / 0 | 111,9 / **33,2** / 69,8 / 31,7 |
+| 8 | E5 | 42,31 | 119,9 | 91,7 | 24,4 | 10,7 | 0 | 0 | 0 / 0 | 129,1 / 99,6 / **1047,3** / 29,2 |
+
+- **Kare ağırlıklı ortalama 119,9 FPS** (22 013 kare). Her seviye 120 Hz vsync tavanında.
+  - %1 düşük 90,7–92,7: p99 kare 10,8–11,0 ms, yani vsync aralığının (8,3 ms) üstünde bir kare. Takılma değil, kare zamanlaması titreşimi.
+  - En kötü kare 11,5–24,4 ms.
+- **Takılma karesi 0, yavaş kare 0.** (h)'deki ~1 sn takılmalar ve ~32 FPS dönemleri temiz makinede yok. Pipeline derlemelerinden geldikleri de söylenemez:
+  - Bütün koşudaki derlemeler T1'de: yüklemede 12 (canvas 2, surface 6, specialization 4), oyunda 4 specialization.
+  - Bu derlemeler hiçbir takılma ya da yavaş kare üretmedi (T1 en kötü kare 13,6 ms). Prewarm'ı genişletmek gerekmedi.
+- **Yükleme karesi 8,8–18,1 ms** ((h) final 20,1–46,9).
+  - 16,7 ms'yi yalnız T1 aşıyor (18,1 ms): ilk seviye, 12 pipeline derlemesiyle aynı karede.
+  - T2–E5: 8,8–14,4 ms.
+- **Yorum:**
+  - Aynı kodla tek fark makinenin durumu: Unity Editor (9,3 GB, %247 CPU) ve büyüyen takas.
+  - O koşullarda 5 gerçek zamanlı koşunun 3'ünde ~1 sn takılma, 2 seviyede ~32 FPS vardı. Temiz makinede ikisi de 0.
+  - **Sebep Unity / takas.** Sınırlama: temiz makinede tek koşu var ve ekran farklı (120 / 144 Hz). (h)'deki yük deneyinde saf CPU yükü düşüş üretmemişti, takas büyürken üretmişti. Bu yüzden bellek baskısı en tutarlı açıklama.
+
 ### Testler
-**1824 kontrol, 0 hata** (h: 1741). Yeni: `test_game_flow` (6 test / 30 kontrol). Eklemeler: `test_level_flow` (+2 test), `test_save` (+3), `test_visuals` (+3), `test_report` (+1), `test_hazards` (+2).
+**1831 kontrol, 0 hata** (#9b'den sonra; önce 1824; h: 1741). Yeni: `test_game_flow` (6 test / 30 kontrol). Eklemeler: `test_level_flow` (+2 test), `test_save` (+3), `test_visuals` (+3), `test_report` (+1), `test_hazards` (+2).
 
 ### Headless 3 + 5 (son kod)
 `--fixed-fps 60 -- --demo --demo-exit-on-finish --fresh-save --endless-levels=5 --endless-seed=2026`. Exit 0, hata 0, uyarı 0.
@@ -546,7 +615,7 @@ _(kullanıcı sonradan değiştirebilir; her biri gerekçesiyle)_
 - **(i) Ayarlar diske 0,5 sn debounce ile yazılıyor;** ekran kapanınca ve çıkışta hemen.
 - **(i) Menüde geri: Esc / gamepad B; onay: Enter / Space / gamepad A. P yalnız oyun içinde duraklatır.**
 - **(i) Dekorasyon yükleme karesinden sonra, kare başına bir gezegen.** Seviye açılırken 3–8 kare (≈ 25–65 ms) içinde beliriyor. Fade eklenmedi, çünkü yükleme karesi zaten 16,7 ms'nin altında.
-- **(i) Ezme kuralı değişmedi** (ayak ≥ 0,35 × yarıçap, yükselme ≤ 0,5 m/s). Hızlı inişte temasın geç algılanması kuralı darlaştırıyor; değiştirmek tasarım kararı, soruldu.
+- **(i) Ezme kuralı geç teması affediyor** (kullanıcı kararı b). Ezme koşulu: ayak ≥ 0,35 × yarıçap, yükselme ≤ 0,5 m/s. Ayrıca bir fizik adımı önce ayak eşiğin üstünde ve top üzerindeyse (yanal ≤ top + kapsül yarıçapı) de ezme sayılıyor.
 
 ## Ölçümler
 | Milestone | Sahne | FPS ort | FPS min | draw call ort | physics_process ort | Not |
@@ -560,11 +629,12 @@ _(kullanıcı sonradan değiştirebilir; her biri gerekçesiyle)_
 | (e) | demo T1→T3 (ses + parçacık + sarsıntı) | 119,5 | 117 | 90 | 1,3 ms | 12 sn; parçacık önbelleği + ısıtma sonrası |
 | (h) | Beckett 2: 3 tutorial + 5 sonsuz, editöre gömülü, 120 Hz | 118,8 | %1 düşük 91,2 | — | — | `DemoReport`, kare ağırlıklı; E3'te 1006,8 ms tek takılma |
 | (h) | Final: 3 tutorial + 5 sonsuz, bağımsız pencere, 144 Hz | 129,0 | %1 düşük 32,0 (E3) | — | — | 5/8 seviyede %1 düşük ≥ 110; Unity Editor açıkken |
+| (i) | 3 tutorial + 5 sonsuz, bağımsız pencere, 120 Hz, temiz makine | 119,9 | %1 düşük 90,7 (E4) | — | — | takılma 0, yavaş kare 0, en kötü 24,4 ms |
 
 ## Açık sorunlar / notlar
-- ~~Seviye geçişinde tek karelik takılma (20–47 ms)~~ → (i)'de 6,8–13,2 ms (pencereli probe). Son doğrulama temiz makinedeki pencereli koşuda.
-- (i) #9: bot hâlâ hasar alabiliyor (30 seviyelik taramada 6, headless 3+5'te 1). Karar bekliyor.
-- (i) #8: ~1 sn takılma ve ~32 FPS dönemlerinin sebebi henüz kanıtlanmadı. Altyapı hazır, temiz makinede pencereli koşu bekliyor.
+- ~~Seviye geçişinde tek karelik takılma (20–47 ms)~~ → (i)'de 6,8–13,2 ms (pencereli probe). Temiz makinedeki pencereli koşuda 8,8–14,4 ms; T1 18,1 ms (ilk seviye, pipeline derlemeleriyle aynı kare).
+- (i) #9: kural düzeltildi. Bot taramada hâlâ 4 diken hasarı alıyor: hepsi yandan ya da yükselirken temas (botun yaklaşması). Headless 3+5'te 0.
+- ~~(i) #8: ~1 sn takılma ve ~32 FPS dönemleri~~ → temiz makinede 0. Unity / takas kaynaklıydı.
 - (a) `get_performance_monitors` → `process_time` max 0,75 sn, ort 0,14 sn; bu, FPS ort 104 ile çelişiyordu. Beckett örneklemesi ve ekran görüntüsü sırasında ana iş parçacığı bekliyor. (h)'de FPS oyun içi `DemoReport` ile Beckett'ten bağımsız ölçüldü.
 - Beckett MCP koparsa Claude Code'da `/mcp` ile yeniden bağlanmak gerekiyor; o sürede doğrulama CLI ile yapılıyor (bkz. CLAUDE.md).
 - Beckett `validate_script`, geçici kopyada sınıf adını `__BeckettValidate` yapıyor. Bu yüzden `self`'i tipli parametreye geçiren kod doğrulamadan geçmiyor. Tasarım buna göre: Level, `player.input_source` ve `input.bind(player)` bağlamasını dışarıdan yapıyor.
