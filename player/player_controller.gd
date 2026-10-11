@@ -69,9 +69,12 @@ var current_planet: Planet = null
 
 ## 0..1; reaching 1 on a burning surface costs a heart and bounces the player.
 var heat: float = 0.0
+## Feet position before this physics step's move_and_slide (late stomp contact).
+var previous_global_position: Vector3 = Vector3.ZERO
 
 @onready var respawn_tracker: RespawnTracker = $RespawnTracker
 @onready var health: PlayerHealth = $PlayerHealth
+@onready var _collision: CollisionShape3D = $CollisionShape3D
 
 var _coyote_timer: float = 0.0
 var _jump_buffer_timer: float = 0.0
@@ -88,6 +91,7 @@ func _ready() -> void:
 	floor_stop_on_slope = true
 	collision_layer = PhysicsLayers.PLAYER
 	collision_mask = PhysicsLayers.WORLD
+	previous_global_position = global_position
 
 
 func _physics_process(delta: float) -> void:
@@ -96,6 +100,7 @@ func _physics_process(delta: float) -> void:
 	_apply_steering(delta)
 	_apply_jump(delta)
 	var pre_slide_velocity := velocity
+	previous_global_position = global_position
 	move_and_slide()
 	_after_slide(pre_slide_velocity)
 	_update_heat(delta)
@@ -106,6 +111,7 @@ func _physics_process(delta: float) -> void:
 ## getting lost in space. Interpolation is reset so the camera can snap too.
 func respawn_at(xform: Transform3D) -> void:
 	global_transform = xform
+	previous_global_position = global_position
 	velocity = Vector3.ZERO
 	current_up = xform.basis.y.normalized()
 	up_direction = current_up
@@ -134,6 +140,11 @@ func take_hit(damage: int, source: Vector3, cause: String) -> void:
 	velocity = away.normalized() * knockback_speed + current_up * knockback_lift
 	_jump_cut_done = true
 	bounced.emit()
+
+
+## Radius of the body capsule (sideways reach when touching an enemy).
+func collision_radius() -> float:
+	return (_collision.shape as CapsuleShape3D).radius
 
 
 func tangential_velocity() -> Vector3:

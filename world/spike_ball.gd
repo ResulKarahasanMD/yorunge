@@ -58,9 +58,24 @@ var is_defeated: bool = false
 
 ## Pure stomp test: `feet_offset` = player feet minus ball centre, `ball_up` =
 ## outward unit normal under the ball, `rise_speed` = player velocity · ball_up.
+## A fast fall is noticed a physics step late, with the feet already below the
+## threshold: `prev_feet_offset` (the same offset one step earlier) also counts
+## when the feet were above the threshold then and no further out sideways
+## (perpendicular to `ball_up`) than `lateral_reach`, so a player falling past
+## the ball's side still gets hit. Without it only the contact step counts.
 static func is_stomp(feet_offset: Vector3, ball_up: Vector3, rise_speed: float,
-		radius: float, height_fraction: float, max_rise: float) -> bool:
-	return feet_offset.dot(ball_up) >= radius * height_fraction and rise_speed <= max_rise
+		radius: float, height_fraction: float, max_rise: float,
+		prev_feet_offset: Vector3 = Vector3.INF, lateral_reach: float = 0.0) -> bool:
+	if rise_speed > max_rise:
+		return false
+	var threshold := radius * height_fraction
+	if feet_offset.dot(ball_up) >= threshold:
+		return true
+	if not prev_feet_offset.is_finite():
+		return false
+	var prev_height := prev_feet_offset.dot(ball_up)
+	var prev_lateral := (prev_feet_offset - ball_up * prev_height).length()
+	return prev_height >= threshold and prev_lateral <= lateral_reach
 
 
 func _ready() -> void:
@@ -121,7 +136,10 @@ func _on_body_entered(other: Node3D) -> void:
 		return
 	var up := ball_up()
 	var feet_offset := player.global_position - body.global_position
-	if is_stomp(feet_offset, up, player.velocity.dot(up), ball_radius, stomp_height_fraction, stomp_max_rise_speed):
+	var step := 1.0 / Engine.physics_ticks_per_second
+	var prev_feet_offset := player.previous_global_position - predicted_body_position(-step)
+	if is_stomp(feet_offset, up, player.velocity.dot(up), ball_radius, stomp_height_fraction, stomp_max_rise_speed,
+			prev_feet_offset, ball_radius + player.collision_radius()):
 		player.bounce(stomp_bounce_speed)
 		defeat()
 	else:
